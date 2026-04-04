@@ -1,21 +1,23 @@
 import os
 import gdown
 
-MODEL_DIR = "resources"
 GDRIVE_FOLDER_ID = "1hanu85tSennwbLadJsgEnIxF0ZrvniHL"
 
 def ensure_models():
     """
-    Downloads model artifacts from Google Drive
-    only if they are not already present.
+    Downloads model artifacts from Google Drive only if not already present.
+    Paths are resolved relative to this file's location so it works on
+    Streamlit Cloud and locally regardless of working directory.
     """
+    base = os.path.dirname(os.path.abspath(__file__))
+    model_dir = os.path.join(base, "resources")
 
     required_paths = [
-        "resources/deberta-clause-final",
-        "resources/clause_centroids.npy",
-        "resources/clause_thresholds.npy",
-        "resources/clause_applicability.npy",
-        "resources/clause_polarity.npy",
+        os.path.join(model_dir, "deberta-clause-final"),
+        os.path.join(model_dir, "clause_centroids.npy"),
+        os.path.join(model_dir, "clause_thresholds.npy"),
+        os.path.join(model_dir, "clause_applicability.npy"),
+        os.path.join(model_dir, "clause_polarity.npy"),
     ]
 
     if all(os.path.exists(p) for p in required_paths):
@@ -23,12 +25,11 @@ def ensure_models():
         return
 
     print("⬇️ Downloading models from Google Drive...")
-
-    os.makedirs(MODEL_DIR, exist_ok=True)
+    os.makedirs(model_dir, exist_ok=True)
 
     gdown.download_folder(
         id=GDRIVE_FOLDER_ID,
-        output=MODEL_DIR,
+        output=model_dir,
         quiet=False,
         use_cookies=False
     )

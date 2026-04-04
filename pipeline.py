@@ -23,7 +23,9 @@ CONFIDENCE_GAP_MIN = 0.10     # top-1 must beat top-2 by at least this margin
 SEMANTIC_DEVIATION_PERCENTILE = 90  # was 95 — catches more deviations
 device = torch.device("cpu")
 
-CLAUSE_MODEL_PATH = "resources/deberta-clause-final"
+import os as _os
+_BASE = _os.path.dirname(_os.path.abspath(__file__))
+CLAUSE_MODEL_PATH = _os.path.join(_BASE, "resources", "deberta-clause-final")
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-mpnet-base-v2"
 
 # ============================================================
@@ -122,16 +124,15 @@ def load_models():
 
 @st.cache_resource
 def load_baselines():
-    centroids   = np.load("resources/clause_centroids.npy",      allow_pickle=True).item()
-    thresholds  = np.load("resources/clause_thresholds.npy",     allow_pickle=True).item()
-    applicability = np.load("resources/clause_applicability.npy", allow_pickle=True).item()
-    polarity    = np.load("resources/clause_polarity.npy",       allow_pickle=True).item()
-
-    # Load enhanced keyword profiles if available
-    kw_path = "resources/clause_keywords.npy"
     import os
+    base = os.path.dirname(os.path.abspath(__file__))
+    res = os.path.join(base, "resources")
+    centroids     = np.load(os.path.join(res, "clause_centroids.npy"),      allow_pickle=True).item()
+    thresholds    = np.load(os.path.join(res, "clause_thresholds.npy"),     allow_pickle=True).item()
+    applicability = np.load(os.path.join(res, "clause_applicability.npy"),  allow_pickle=True).item()
+    polarity      = np.load(os.path.join(res, "clause_polarity.npy"),       allow_pickle=True).item()
+    kw_path = os.path.join(res, "clause_keywords.npy")
     keywords = np.load(kw_path, allow_pickle=True).item() if os.path.exists(kw_path) else {}
-
     return centroids, thresholds, applicability, polarity, keywords
 
 
