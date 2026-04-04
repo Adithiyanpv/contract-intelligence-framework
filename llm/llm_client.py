@@ -2,23 +2,22 @@ import os
 import requests
 
 
-def groq_client(prompt, model="llama-3.1-8b-instant"):
-    """
-    Groq cloud LLM — fast, free tier available.
-    Requires GROQ_API_KEY in environment or Streamlit secrets.
-    """
-    api_key = os.environ.get("GROQ_API_KEY", "")
-
-    # Also try Streamlit secrets if running in cloud
-    if not api_key:
+def _get_groq_key():
+    """Read Groq API key from env or Streamlit secrets."""
+    key = os.environ.get("GROQ_API_KEY", "")
+    if not key:
         try:
             import streamlit as st
-            api_key = st.secrets.get("GROQ_API_KEY", "")
+            key = st.secrets.get("GROQ_API_KEY", "")
         except Exception:
             pass
+    return key
 
+
+def groq_client(prompt, model="llama-3.1-8b-instant"):
+    api_key = _get_groq_key()
     if not api_key:
-        return None  # signal: no key available
+        raise ValueError("GROQ_API_KEY not set")
 
     r = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
@@ -39,20 +38,13 @@ def groq_client(prompt, model="llama-3.1-8b-instant"):
 
 
 def ollama_client(prompt, model="llama3.2:3b"):
-    """
-    Local Ollama LLM — used when running locally.
-    """
     r = requests.post(
         "http://localhost:11434/api/generate",
         json={
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "options": {
-                "num_predict": 300,
-                "temperature": 0.3,
-                "top_p": 0.9,
-            },
+            "options": {"num_predict": 300, "temperature": 0.3},
         },
         timeout=120,
     )
@@ -67,30 +59,15 @@ def ollama_client(prompt, model="llama3.2:3b"):
 
 def get_llm_client():
     """
-    Returns the best available LLM client:
-    1. Groq (cloud, fast) — if GROQ_API_KEY is set
-    2. Ollama (local) — if server is reachable
-    3. None — deterministic fallback
+    Returns (callable, source_name).
+    Priority: Groq (key present) → Ollama (reachable) → None
+    Does NOT make a test call — just checks availability.
     """
-    # Try Groq first
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key:
-        try:
-            import streamlit as st
-            api_key = st.secrets.get("GROQ_API_KEY", "")
-        except Exception:
-            pass
+    # 1. Groq — just check if key exists, no test call
+    if _get_groq_key():
+        return groq_client, "groq"
 
-    if api_key:
-        # Validate key works
-        try:
-            test = groq_client("Say OK", model="llama-3.1-8b-instant")
-            if test:
-                return groq_client, "groq"
-        except Exception:
-            pass
-
-    # Try Ollama
+    # 2. Ollama — check if server is reachable
     try:
         r = requests.get("http://localhost:11434/api/tags", timeout=3)
         if r.status_code == 200:
