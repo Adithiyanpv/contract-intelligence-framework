@@ -3,4 +3,4 @@ enableXsrfProtection = false
 maxUploadSize = 200
 
 [theme]
-base = "light"
+base = "dark"
