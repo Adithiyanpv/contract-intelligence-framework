@@ -58,6 +58,7 @@ if st.sidebar.button("Analyze Contract"):
         st.session_state.summary_narration = summary_narration
         st.session_state.last_answer = None
         st.session_state.analyzed = True
+        st.query_params["tab"] = "overview"
         progress_bar.empty()
         st.sidebar.success("Analysis complete")
 if st.session_state.analyzed:
@@ -68,7 +69,19 @@ if st.session_state.analyzed:
     st.sidebar.subheader("Export Results")
     st.sidebar.download_button("Download CSV", data=export_results_csv(clause_df, spans), file_name="contract_analysis.csv", mime="text/csv")
     st.sidebar.download_button("Download JSON", data=export_results_json(clause_df, spans, summary), file_name="contract_analysis.json", mime="application/json")
+    _TAB_IDX = {"overview": 0, "deviations": 1, "analytics": 2, "ask": 3}
+    _active_tab = st.query_params.get("tab", "overview")
+    _tab_idx = _TAB_IDX.get(_active_tab, 0)
     tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Deviating Clauses", "Analytics", "Ask the Contract"])
+    if _tab_idx > 0:
+        st.components.v1.html(f"""<script>
+function clickTab(){{
+    var tabs=window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+    if(tabs.length>{_tab_idx}){{tabs[{_tab_idx}].click();}}
+    else{{setTimeout(clickTab,150);}}
+}}
+setTimeout(clickTab,300);
+</script>""", height=0)
     with tab1:
         st.subheader("Contract Summary")
         st.write(st.session_state.summary_narration)
@@ -143,6 +156,7 @@ if st.session_state.analyzed:
             if not question.strip():
                 st.warning("Please enter a question.")
             else:
+                st.query_params["tab"] = "ask"
                 retrieval = ask_document(question, clause_df, spans, st.session_state.embeddings, st.session_state.embedder)
                 evidence_list = retrieval.get("evidence", [])
                 if llm is not None:
