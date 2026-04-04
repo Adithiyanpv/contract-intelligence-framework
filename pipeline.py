@@ -136,8 +136,10 @@ def load_baselines():
     return centroids, thresholds, applicability, polarity, keywords
 
 
-clause_centroids, clause_thresholds, clause_applicability_thresholds, \
-    clause_polarity_profiles, clause_keyword_profiles = load_baselines()
+def _get_baselines():
+    """Lazy loader — called inside analyze_document, not at import time."""
+    return load_baselines()
+
 
 
 # ============================================================
@@ -410,6 +412,10 @@ def analyze_document(pdf_path, progress_callback=None):
     """
     tokenizer, model, embedder = load_models()
     id_to_clause = {int(k): v for k, v in model.config.id2label.items()}
+
+    # Load baselines lazily (after models/files are downloaded)
+    clause_centroids, clause_thresholds, clause_applicability_thresholds, \
+        clause_polarity_profiles, clause_keyword_profiles = _get_baselines()
     num_labels = len(id_to_clause)
 
     # ---- PDF TO TEXT ----
