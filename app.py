@@ -15,8 +15,8 @@ if not os.path.exists(os.path.join(_APP_DIR, "resources", "deberta-clause-final"
             st.stop()
 from llm.llm_client import get_llm_client, build_safe_prompt
 from pipeline import (analyze_document, ask_document, build_contract_summary,
-from summarizer.contract_summarizer import summarize_contract, evaluate_summary
                       narrate_contract_summary, export_results_csv, export_results_json)
+from summarizer.contract_summarizer import summarize_contract, evaluate_summary
 
 # ── Session state ──────────────────────────────────────────────────────────────
 for k, v in [("analyzed", False), ("last_answer", None), ("contract_doc_summary", None)]:
