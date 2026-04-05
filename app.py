@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +22,7 @@ from summarizer.hrs_engine import hierarchical_summarize, CLAUSE_CATEGORIES
 
 from rag.contract_rag import crag_answer
 # ── Session state ──────────────────────────────────────────────────────────────
-for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
+for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None), ("_force_ask_tab", False), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -266,6 +266,10 @@ if st.session_state.analyzed:
     if _has_multidoc: _tab_labels.append("  Multi-Doc  ")
     _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask"] + (["multidoc"] if _has_multidoc else []))}
     _idx = _TAB_IDX.get(_active, 0)
+    # If answer was just generated, force Ask tab regardless of _active_tab
+    if st.session_state.get('_force_ask_tab'):
+        _idx = _TAB_IDX.get('ask', 5)
+        st.session_state['_force_ask_tab'] = False
     _tabs = st.tabs(_tab_labels)
     tab1,tab2,tab3,tab4,tab5,tab6 = _tabs[:6]
     tab7 = _tabs[6] if _has_multidoc else None
@@ -538,6 +542,7 @@ Powered by <b>{"Groq · llama-3.1-8b-instant" if llm_source=="groq" else "Ollama
                 st.warning("Please enter a question.")
             else:
                 st.session_state["_active_tab"] = "ask"
+                st.session_state["_force_ask_tab"] = True
                 with st.spinner("Running CRAG pipeline..."):
                     result = crag_answer(
                         question, clause_df, spans,
