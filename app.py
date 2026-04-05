@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -238,10 +238,13 @@ if st.session_state.analyzed:
     summary = st.session_state.contract_summary
 
     _TAB_IDX = {"overview":0,"deviations":1,"risk":2,"analytics":3,"summary":4,"ask":5,"multidoc":6}
-    _active = st.query_params.get("tab","overview")
-    _idx = _TAB_IDX.get(_active, 0)
-
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  ","  Multi-Doc  "])
+    _has_multidoc = bool(st.session_state.get("multi_doc_results"))
+    _tab_labels = ["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  "]
+    if _has_multidoc: _tab_labels.append("  Multi-Doc  ")
+    _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask"] + (["multidoc"] if _has_multidoc else []))}
+    _tabs = st.tabs(_tab_labels)
+    tab1,tab2,tab3,tab4,tab5,tab6 = _tabs[:6]
+    tab7 = _tabs[6] if _has_multidoc else None
 
     if _idx > 0:
         st.components.v1.html(f"""<script>
@@ -384,7 +387,7 @@ setTimeout(clickTab,300);
 </div>""", unsafe_allow_html=True)
 
         if st.button("Generate Summary", use_container_width=False, key="gen_summary"):
-            with st.spinner("Running DistilBART summarization (first run downloads ~306MB model)..."):
+            with st.spinner("Generating summary..."):
                 doc_summary = summarize_contract(spans, clause_df, st.session_state.embedder, summary)
                 metrics = evaluate_summary(doc_summary, spans)
                 st.session_state.contract_doc_summary = {"summary": doc_summary, "metrics": metrics}
@@ -446,7 +449,7 @@ setTimeout(clickTab,300);
 
             # Per-clause abstractive summaries
             if ds["clause_summaries"]:
-                st.markdown('<p class="section-header">Per-Clause Summaries (DistilBART)</p>', unsafe_allow_html=True)
+                st.markdown('<p class="section-header">Per-Clause Summaries (AI-Generated)</p>', unsafe_allow_html=True)
                 for clause, clause_sum in ds["clause_summaries"].items():
                     dev = any(d["clause"] == clause for d in ds["risk_flags"])
                     icon = "⚠️ " if dev else "✅ "
@@ -640,14 +643,14 @@ ContractIQ augments human review — it does not replace it.
 
 
     # ── TAB 7: MULTI-DOC ─────────────────────────────────────────────────────
-    with tab7:
-        st.markdown('<p class="section-header">Multi-Document Analysis</p>', unsafe_allow_html=True)
+    if tab7 is not None:
+        with tab7:
 
-        if not st.session_state.get("multi_doc_results"):
-            if st.session_state.analysis_mode == "multi":
-                st.info("Upload 2 or more contracts and click **Analyze Contract(s)** to compare them.")
-            else:
-                st.markdown("""<div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:10px;padding:1.2rem;color:#94a3b8;font-size:0.88rem">
+            if not st.session_state.get("multi_doc_results"):
+                if st.session_state.analysis_mode == "multi":
+                    st.info("Upload 2 or more contracts and click **Analyze Contract(s)** to compare them.")
+                else:
+                    st.markdown("""<div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:10px;padding:1.2rem;color:#94a3b8;font-size:0.88rem">
 Switch to <b style="color:#63b3ed">Multi-Document</b> mode in the sidebar to upload and compare multiple contracts simultaneously.
 <br><br>Use cases: contract version comparison · master + amendments · vendor portfolio risk · counterparty benchmarking.
 </div>""", unsafe_allow_html=True)
