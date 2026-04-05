@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -180,9 +180,11 @@ if analyze_clicked:
             progress_bar.progress(pct, text=msg)
 
         # Always analyze the first (or only) doc as the primary
-        primary_pdf = uploaded_pdfs[0]
+        # Read all file bytes upfront — file objects become unreadable after rerun
+        all_pdf_bytes = [(f.name, f.read()) for f in uploaded_pdfs]
+        primary_name, primary_bytes = all_pdf_bytes[0]
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(primary_pdf.read())
+            tmp.write(primary_bytes)
             pdf_path = tmp.name
 
         clause_df, spans, embeddings, embedder = analyze_document(pdf_path, progress_callback=update_progress)
@@ -206,22 +208,22 @@ if analyze_clicked:
         # Multi-doc: analyze remaining documents
         if is_multi:
             doc_results = [{
-                "name": primary_pdf.name,
+                "name": primary_name,
                 "clause_df": clause_df,
                 "spans": spans,
                 "summary": contract_summary,
             }]
             for i, pdf_file in enumerate(uploaded_pdfs[1:], 2):
-                progress_bar.progress(0, text=f"Analyzing document {i}/{len(uploaded_pdfs)}: {pdf_file.name}…")
+                progress_bar.progress(0, text=f"Analyzing document {i}/{len(all_pdf_bytes)}: {extra_name}...")
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                    tmp.write(pdf_file.read())
+                    tmp.write(extra_bytes)
                     extra_path = tmp.name
                 extra_df, extra_spans, _, _ = analyze_document(extra_path)
                 extra_df["_known"] = extra_df["final_clause"] != "Unknown"
                 extra_df = extra_df.sort_values(by=["_known","span_id"], ascending=[False,True]).drop(columns="_known").reset_index(drop=True)
                 extra_summary = build_contract_summary(extra_df, extra_spans)
                 doc_results.append({
-                    "name": pdf_file.name,
+                    "name": extra_name,
                     "clause_df": extra_df,
                     "spans": extra_spans,
                     "summary": extra_summary,
