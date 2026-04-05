@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +23,8 @@ from summarizer.hrs_engine import hierarchical_summarize, CLAUSE_CATEGORIES
 from rag.contract_rag import crag_answer
 # ── Session state ──────────────────────────────────────────────────────────────
 from negotiation.simulator import simulate_negotiation, STANCES
-for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None), ("_force_ask_tab", False), ("neg_results", None), ("neg_clause", None), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
+from obligation_graph.extractor import extract_obligations, build_obligation_graph
+for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None), ("_force_ask_tab", False), ("neg_results", None), ("neg_clause", None), ("ob_graph", None), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -263,17 +264,17 @@ if st.session_state.analyzed:
     summary = st.session_state.contract_summary
     _active = st.session_state.get("_active_tab", st.query_params.get("tab", "overview"))
     _has_multidoc = bool(st.session_state.get("multi_doc_results"))
-    _tab_labels = ["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  ","  Negotiate  "]
+    _tab_labels = ["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  ","  Negotiate  ","  Obligation Graph  "]
     if _has_multidoc: _tab_labels.append("  Multi-Doc  ")
-    _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask","negotiate"] + (["multidoc"] if _has_multidoc else []))}
+    _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask","negotiate","obgraph"] + (["multidoc"] if _has_multidoc else []))}
     _idx = _TAB_IDX.get(_active, 0)
     # If answer was just generated, force Ask tab regardless of _active_tab
     if st.session_state.get('_force_ask_tab'):
         _idx = _TAB_IDX.get('ask', 5)
         st.session_state['_force_ask_tab'] = False
     _tabs = st.tabs(_tab_labels)
-    tab1,tab2,tab3,tab4,tab5,tab6,tab7 = _tabs[:7]
-    tab8 = _tabs[7] if _has_multidoc else None
+    tab1,tab2,tab3,tab4,tab5,tab6,tab7,tab8 = _tabs[:8]
+    tab9 = _tabs[8] if _has_multidoc else None
 
     if _idx > 0:
         st.components.v1.html(f"""<script>
@@ -662,10 +663,114 @@ Each alternative is scored for how much it moves the clause toward standard lang
 
                 st.caption("Note: These are AI-generated suggestions for negotiation purposes only. Not legal advice.")
 
+
+    # ── TAB 8: OBLIGATION GRAPH ───────────────────────────────────────────────
+    with tab8:
+        st.markdown('<p class="section-header">Obligation Graph</p>', unsafe_allow_html=True)
+        st.markdown("""<div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.2);border-radius:8px;padding:0.8rem 1rem;font-size:0.82rem;color:#94a3b8;margin-bottom:1rem">
+🔗 <b style="color:#e2e8f0">Novel feature</b> — Visualizes the structural balance of obligations in the contract.
+Extracts who owes what to whom, detects one-sided contracts, and flags missing reciprocal duties.
+</div>""", unsafe_allow_html=True)
+
+        if st.button("🔗 Build Obligation Graph", use_container_width=False, key="ob_btn"):
+            with st.spinner("Extracting obligation relationships..."):
+                ob_list = extract_obligations(spans, clause_df)
+                ob_graph = build_obligation_graph(ob_list)
+                st.session_state["ob_graph"] = ob_graph
+                st.session_state["ob_list"] = ob_list
+
+        if st.session_state.get("ob_graph"):
+            import pandas as pd
+            g = st.session_state["ob_graph"]
+            ob_list = st.session_state.get("ob_list", [])
+
+            if not g["nodes"]:
+                st.warning("No obligation relationships could be extracted from this contract.")
+            else:
+                # ── Balance score ──────────────────────────────────────────
+                bs = g["balance_score"]
+                bs_color = "#68d391" if bs >= 0.6 else "#f6ad55" if bs >= 0.3 else "#fc8181"
+                bs_label = "Balanced" if bs >= 0.6 else "Moderately One-Sided" if bs >= 0.3 else "Highly One-Sided"
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.markdown(f'<div class="metric-card"><div class="val" style="color:{bs_color}">{bs:.2f}</div><div class="lbl">Balance Score</div></div>', unsafe_allow_html=True)
+                c2.markdown(f'<div class="metric-card"><div class="val">{len(g["nodes"])}</div><div class="lbl">Parties</div></div>', unsafe_allow_html=True)
+                c3.markdown(f'<div class="metric-card"><div class="val">{len([o for o in ob_list if o["verb_type"]=="obligation"])}</div><div class="lbl">Obligations</div></div>', unsafe_allow_html=True)
+                c4.markdown(f'<div class="metric-card"><div class="val">{len(g["missing_reciprocals"])}</div><div class="lbl">Missing Reciprocals</div></div>', unsafe_allow_html=True)
+
+                st.markdown(f'<div style="text-align:center;color:{bs_color};font-size:0.85rem;margin:0.5rem 0">Contract obligation balance: <b>{bs_label}</b></div>', unsafe_allow_html=True)
+
+                # ── Obligation matrix ──────────────────────────────────────
+                st.markdown('<p class="section-header">Obligation Matrix (Party × Party)</p>', unsafe_allow_html=True)
+                st.caption("Each cell shows how many obligations flow from the row party to the column party")
+
+                parties = g["nodes"]
+                if len(parties) > 1:
+                    matrix_rows = []
+                    for p_from in parties:
+                        row = {"Party": p_from}
+                        for p_to in parties:
+                            if p_from == p_to:
+                                row[p_to] = "—"
+                            else:
+                                count = g["adjacency"].get(p_from, {}).get(p_to, 0)
+                                row[p_to] = count if count > 0 else "·"
+                        matrix_rows.append(row)
+                    st.dataframe(pd.DataFrame(matrix_rows).set_index("Party"), use_container_width=True)
+
+                # ── Per-party breakdown ────────────────────────────────────
+                st.markdown('<p class="section-header">Per-Party Obligation Breakdown</p>', unsafe_allow_html=True)
+                party_rows = []
+                for party, counts in g["obligation_counts"].items():
+                    total = counts["obligation"] + counts["permission"] + counts["prohibition"]
+                    party_rows.append({
+                        "Party": party,
+                        "Obligations (shall/must)": counts["obligation"],
+                        "Permissions (may)": counts["permission"],
+                        "Prohibitions (shall not)": counts["prohibition"],
+                        "Total": total,
+                    })
+                party_rows.sort(key=lambda x: x["Total"], reverse=True)
+                st.dataframe(pd.DataFrame(party_rows), use_container_width=True, hide_index=True)
+
+                if g["dominant_party"]:
+                    dom = g["dominant_party"]
+                    dom_count = g["obligation_counts"][dom]["obligation"]
+                    st.markdown(f'<div style="background:rgba(252,129,129,0.06);border-left:3px solid #fc8181;border-radius:0 8px 8px 0;padding:0.6rem 1rem;color:#94a3b8;font-size:0.85rem;margin:0.5rem 0">⚠️ <b style="color:#e2e8f0">{dom}</b> carries the most obligations ({dom_count} obligation statements)</div>', unsafe_allow_html=True)
+
+                # ── Missing reciprocals ────────────────────────────────────
+                if g["missing_reciprocals"]:
+                    st.markdown('<p class="section-header">Missing Reciprocal Obligations</p>', unsafe_allow_html=True)
+                    st.caption("These obligations exist for one party but have no corresponding duty for the other party")
+                    for mr in g["missing_reciprocals"][:6]:
+                        st.markdown(f'<div style="background:rgba(246,173,85,0.06);border-left:3px solid #f6ad55;border-radius:0 8px 8px 0;padding:0.6rem 1rem;margin:0.3rem 0"><span style="color:#f6ad55;font-size:0.82rem"><b>{mr["party_a"]}</b> has a "{mr["obligation"]}" obligation but <b>{mr["party_b"]}</b> does not</span><br><span style="color:#64748b;font-size:0.78rem">{mr["example"]}</span></div>', unsafe_allow_html=True)
+
+                # ── Clause density ─────────────────────────────────────────
+                if g["clause_density"]:
+                    st.markdown('<p class="section-header">Obligation Density by Clause Type</p>', unsafe_allow_html=True)
+                    density_df = pd.DataFrame([
+                        {"Clause Type": k, "Obligation Count": v}
+                        for k, v in list(g["clause_density"].items())[:10]
+                    ])
+                    st.bar_chart(density_df.set_index("Clause Type"))
+
+                # ── Raw obligations table ──────────────────────────────────
+                with st.expander(f"View all {len(ob_list)} extracted obligation statements"):
+                    ob_df = pd.DataFrame([{
+                        "Party": o["subject"],
+                        "Type": o["verb_type"],
+                        "Action": o["action"][:80],
+                        "Clause": o["clause_type"],
+                        "Span": o["span_id"],
+                    } for o in ob_list])
+                    st.dataframe(ob_df, use_container_width=True, hide_index=True)
+
+                st.caption("Note: Party extraction uses pattern matching and may not capture all parties. Not legal advice.")
+
     # ── TAB 7: MULTI-DOC ─────────────────────────────────────────────────────
     # ── TAB 7: MULTI-DOC ─────────────────────────────────────────────────────
-    if tab8 is not None:
-        with tab8:
+    if tab9 is not None:
+        with tab9:
             st.markdown('<p class="section-header">Multi-Document Analysis</p>', unsafe_allow_html=True)
             if not st.session_state.get("multi_doc_results"):
                 if st.session_state.analysis_mode == "multi":
@@ -854,4 +959,3 @@ st.markdown("""
   </p>
 </div>
 """, unsafe_allow_html=True)
-
