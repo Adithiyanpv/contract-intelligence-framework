@@ -194,11 +194,11 @@ if st.session_state.analyzed:
     spans = st.session_state.spans
     summary = st.session_state.contract_summary
 
-    _TAB_IDX = {"overview":0,"deviations":1,"analytics":2,"summary":3,"ask":4}
+    _TAB_IDX = {"overview":0,"deviations":1,"risk":2,"analytics":3,"summary":4,"ask":5}
     _active = st.query_params.get("tab","overview")
     _idx = _TAB_IDX.get(_active, 0)
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["  Overview  ","  Deviating Clauses  ","  Analytics  ","  Summary  ","  Ask the Contract  "])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  "])
 
     if _idx > 0:
         st.components.v1.html(f"""<script>
@@ -235,32 +235,6 @@ setTimeout(clickTab,300);
         st.markdown('<p style="color:#334155;font-size:0.75rem;margin-top:1.5rem">Deviation detection uses semantic similarity, polarity analysis, and clause-specific rules. Not legal advice.</p>', unsafe_allow_html=True)
     # ── TAB 2: DEVIATING CLAUSES ─────────────────────────────────────────────
     with tab2:
-        if summary["deviations"]:
-            st.markdown('<p class="section-header">Risk Snapshot</p>', unsafe_allow_html=True)
-            for d in summary["deviations"]:
-                st.markdown(risk_card(d["clause"], d["reasons"], d.get("severity","Medium")), unsafe_allow_html=True)
-        else:
-            st.success("✅ No non-standard clause patterns detected.")
-
-
-        st.markdown('<p class="section-header">Clause Text Mapping</p>', unsafe_allow_html=True)
-        for clause_name in sorted(clause_df["final_clause"].unique()):
-            if clause_name == "Unknown":
-                continue
-            rows = clause_df[clause_df["final_clause"] == clause_name]
-            has_dev = rows["final_deviation"].any()
-            icon = "⚠️ " if has_dev else "✅ "
-            with st.expander(f"{icon}{clause_name}  ({len(rows)} span{'s' if len(rows)>1 else ''})"):
-                for _, row in rows.iterrows():
-                    sid = int(row["span_id"])
-                    conf = row["confidence"]
-                    sev = row.get("severity")
-                    dev_badge = f' &nbsp; {pill(sev)}' if row["final_deviation"] and sev else ""
-                    st.markdown(f'<span style="color:#64748b;font-size:0.8rem">Span {sid} &nbsp;·&nbsp; confidence <b style="color:#63b3ed">{conf:.0%}</b>{dev_badge}</span>', unsafe_allow_html=True)
-                    st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem;margin:0.4rem 0;color:#cbd5e1;font-size:0.88rem;line-height:1.6">{spans[sid]}</div>', unsafe_allow_html=True)
-
-        st.markdown('<p style="color:#334155;font-size:0.75rem;margin-top:2rem">Deviation detection uses semantic similarity, polarity analysis, and clause-specific rules. Not legal advice.</p>', unsafe_allow_html=True)
-
         deviating = clause_df[clause_df["final_deviation"]]
         if deviating.empty:
             st.success("✅ No deviating clauses detected in this contract.")
@@ -300,7 +274,37 @@ setTimeout(clickTab,300);
                     st.markdown('</div>', unsafe_allow_html=True)
 
     # ── TAB 3: ANALYTICS ─────────────────────────────────────────────────────
+
+    # ── TAB 3: RISK ANALYSIS ──────────────────────────────────────────────
     with tab3:
+        if summary["deviations"]:
+            st.markdown('<p class="section-header">Risk Snapshot</p>', unsafe_allow_html=True)
+            for d in summary["deviations"]:
+                st.markdown(risk_card(d["clause"], d["reasons"], d.get("severity","Medium")), unsafe_allow_html=True)
+        else:
+            st.success("✅ No non-standard clause patterns detected.")
+
+
+        st.markdown('<p class="section-header">Clause Text Mapping</p>', unsafe_allow_html=True)
+        for clause_name in sorted(clause_df["final_clause"].unique()):
+            if clause_name == "Unknown":
+                continue
+            rows = clause_df[clause_df["final_clause"] == clause_name]
+            has_dev = rows["final_deviation"].any()
+            icon = "⚠️ " if has_dev else "✅ "
+            with st.expander(f"{icon}{clause_name}  ({len(rows)} span{'s' if len(rows)>1 else ''})"):
+                for _, row in rows.iterrows():
+                    sid = int(row["span_id"])
+                    conf = row["confidence"]
+                    sev = row.get("severity")
+                    dev_badge = f' &nbsp; {pill(sev)}' if row["final_deviation"] and sev else ""
+                    st.markdown(f'<span style="color:#64748b;font-size:0.8rem">Span {sid} &nbsp;·&nbsp; confidence <b style="color:#63b3ed">{conf:.0%}</b>{dev_badge}</span>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem;margin:0.4rem 0;color:#cbd5e1;font-size:0.88rem;line-height:1.6">{spans[sid]}</div>', unsafe_allow_html=True)
+
+        st.markdown('<p style="color:#334155;font-size:0.75rem;margin-top:2rem">Deviation detection uses semantic similarity, polarity analysis, and clause-specific rules. Not legal advice.</p>', unsafe_allow_html=True)
+
+
+    with tab4:
         import pandas as pd
         st.markdown('<p class="section-header">Confidence Distribution</p>', unsafe_allow_html=True)
         known_df = clause_df[clause_df["final_clause"] != "Unknown"]
@@ -330,7 +334,7 @@ setTimeout(clickTab,300);
 
 
     # ── TAB 4: SUMMARY ──────────────────────────────────────────────────────
-    with tab4:
+    with tab5:
         st.markdown('<p class="section-header">Document Summary</p>', unsafe_allow_html=True)
         st.markdown('<div class="privacy-notice">🔒 Fully local extraction — no document content sent externally.</div>', unsafe_allow_html=True)
         if st.button("Generate Summary", use_container_width=False):
@@ -370,7 +374,7 @@ setTimeout(clickTab,300);
             st.caption(f"Summary: {mt['summary_sentences']} sentences · Coverage: {mt['coverage']:.1%} · Compression: {mt['compression_ratio']:.1%}")
 
     # ── TAB 4: ASK THE CONTRACT ───────────────────────────────────────────────
-    with tab5:
+    with tab6:
         st.markdown('<p class="section-header">Ask a Question</p>', unsafe_allow_html=True)
 
         if llm_source in ("groq","ollama"):
