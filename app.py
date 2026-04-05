@@ -236,15 +236,12 @@ if st.session_state.analyzed:
     clause_df = st.session_state.clause_df
     spans = st.session_state.spans
     summary = st.session_state.contract_summary
-
-    _TAB_IDX = {"overview":0,"deviations":1,"risk":2,"analytics":3,"summary":4,"ask":5,"multidoc":6}
+    _active = st.query_params.get("tab", "overview")
     _has_multidoc = bool(st.session_state.get("multi_doc_results"))
     _tab_labels = ["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  "]
     if _has_multidoc: _tab_labels.append("  Multi-Doc  ")
     _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask"] + (["multidoc"] if _has_multidoc else []))}
-    _tabs = st.tabs(_tab_labels)
-    tab1,tab2,tab3,tab4,tab5,tab6 = _tabs[:6]
-    tab7 = _tabs[6] if _has_multidoc else None
+    _idx = _TAB_IDX.get(_active, 0)
 
     if _idx > 0:
         st.components.v1.html(f"""<script>
