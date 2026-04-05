@@ -2,42 +2,69 @@
 from collections import defaultdict
 
 OBLIGATION_PATTERN = re.compile(
-    r"([A-Z][a-zA-Z\s]{2,40}?)\s+(?:shall|must|agrees?\s+to|is\s+required\s+to|undertakes?\s+to|will|is\s+obligated\s+to)\s+([^.!?]{10,150})[.!?]",
+    r"([A-Z][a-zA-Z]{2,25}(?:\s+[A-Z][a-zA-Z]{2,20})?)\s+(?:shall|must|agrees?\s+to|is\s+required\s+to|undertakes?\s+to|will|is\s+obligated\s+to)\s+([^.!?]{10,150})[.!?]",
     re.IGNORECASE
 )
 PERMISSION_PATTERN = re.compile(
-    r"([A-Z][a-zA-Z\s]{2,40}?)\s+(?:may|is\s+entitled\s+to|has\s+the\s+right\s+to|reserves?\s+the\s+right\s+to|is\s+permitted\s+to)\s+([^.!?]{10,150})[.!?]",
+    r"([A-Z][a-zA-Z]{2,25}(?:\s+[A-Z][a-zA-Z]{2,20})?)\s+(?:may|is\s+entitled\s+to|has\s+the\s+right\s+to|reserves?\s+the\s+right\s+to|is\s+permitted\s+to)\s+([^.!?]{10,150})[.!?]",
     re.IGNORECASE
 )
 PROHIBITION_PATTERN = re.compile(
-    r"([A-Z][a-zA-Z\s]{2,40}?)\s+(?:shall\s+not|must\s+not|may\s+not|is\s+prohibited\s+from|cannot|will\s+not)\s+([^.!?]{10,150})[.!?]",
+    r"([A-Z][a-zA-Z]{2,25}(?:\s+[A-Z][a-zA-Z]{2,20})?)\s+(?:shall\s+not|must\s+not|may\s+not|is\s+prohibited\s+from|cannot|will\s+not)\s+([^.!?]{10,150})[.!?]",
     re.IGNORECASE
 )
+
 GENERIC_PARTIES = {
     "licensor": "Licensor", "licensee": "Licensee", "vendor": "Vendor",
     "client": "Client", "customer": "Customer", "company": "Company",
     "affiliate": "Affiliate", "provider": "Provider", "recipient": "Recipient",
     "disclosing party": "Disclosing Party", "receiving party": "Receiving Party",
-    "party a": "Party A", "party b": "Party B",
+    "party a": "Party A", "party b": "Party B", "chase": "Chase",
+    "you": "You (Affiliate)", "employer": "Employer", "employee": "Employee",
+}
+
+# Words that are definitely NOT parties
+NOT_PARTIES = {
+    "this", "the", "a", "an", "each", "either", "both", "all", "any", "no",
+    "such", "said", "above", "following", "foregoing", "nothing", "everything",
+    "section", "clause", "exhibit", "schedule", "appendix", "herein", "hereof",
+    "thereof", "agreement", "contract", "party", "parties", "and", "or", "but",
+    "if", "when", "where", "which", "that", "who", "whom", "whose", "what",
+    "notwithstanding", "pursuant", "subject", "provided", "including", "except",
+    "unless", "until", "upon", "during", "within", "without", "between", "among",
+    "order", "tracking", "governing", "modification", "credit", "card", "website",
+    "registration", "processing", "specific", "written", "preliminary",
 }
 
 def _normalize_party(text):
     t = re.sub(r"^the\s+", "", text.strip().lower())
     for key, canonical in GENERIC_PARTIES.items():
-        if key in t:
+        if t == key or t.startswith(key + " "):
             return canonical
-    return text.strip().title()[:30]
+    return text.strip().title()[:25]
 
 def _is_valid_party(text):
     t = text.strip().lower()
-    invalid = ["this agreement","the agreement","section","clause","exhibit","schedule",
-               "appendix","herein","hereof","thereof","each","either","both","all","any",
-               "no","such","said","above","following","foregoing","nothing","everything"]
-    if len(t) < 2 or len(t) > 40:
+    t_clean = re.sub(r"^the\s+", "", t)
+    # Must be 2-25 chars
+    if len(t_clean) < 2 or len(t_clean) > 30:
         return False
-    if any(t.startswith(inv) for inv in invalid):
+    # First word must not be a non-party word
+    first_word = t_clean.split()[0] if t_clean.split() else ""
+    if first_word in NOT_PARTIES:
         return False
-    if re.match(r"^\d", t):
+    # Must not start with a digit
+    if re.match(r"^\d", t_clean):
+        return False
+    # Must not contain special chars (URLs, punctuation)
+    if re.search(r"[:/\(\)\[\]@#]", text):
+        return False
+    # Must look like a proper noun (starts with capital) or known party
+    if not text.strip()[0].isupper():
+        return False
+    # Reject if it looks like a sentence fragment (contains verb-like words)
+    fragment_words = {"processing", "tracking", "governing", "modification", "registration", "ordering"}
+    if any(fw in t_clean for fw in fragment_words):
         return False
     return True
 
@@ -52,8 +79,12 @@ def extract_obligations(spans, clause_df):
                 action = match.group(2).strip()[:120]
                 if not _is_valid_party(subject_raw):
                     continue
+                normalized = _normalize_party(subject_raw)
+                # Skip if normalized is still a non-party word
+                if normalized.lower() in NOT_PARTIES:
+                    continue
                 obligations.append({
-                    "subject": _normalize_party(subject_raw),
+                    "subject": normalized,
                     "verb_type": verb_type,
                     "action": action,
                     "span_id": span_id,
@@ -74,7 +105,7 @@ def build_obligation_graph(obligations):
     for ob in obligations:
         subject = ob["subject"]
         action_lower = ob["action"].lower()
-        target = next((p for p in parties if p != subject and p.lower() in action_lower), "General Obligation")
+        target = next((p for p in parties if p != subject and p.lower() in action_lower), "General")
         edges.append({"from":subject,"to":target,"verb_type":ob["verb_type"],"action":ob["action"],"clause_type":ob["clause_type"]})
         if ob["verb_type"] == "obligation":
             adjacency[subject][target] += 1
