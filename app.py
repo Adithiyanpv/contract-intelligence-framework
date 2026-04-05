@@ -453,19 +453,16 @@ else:
 """, unsafe_allow_html=True)
 
 
-    st.markdown("---")
 
+    st.markdown("---")
     # ── ABOUT CONTRACTIQ ──────────────────────────────────────────────────────
     st.markdown("""
 <div style="background:linear-gradient(135deg,#0d1b2a 0%,#1a2744 100%);border:1px solid rgba(99,179,237,0.2);border-radius:16px;padding:2.5rem 3rem;margin:2rem 0">
-  <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem">
-    <div style="font-size:2rem">⚖️</div>
-    <div>
-      <div style="font-size:1.5rem;font-weight:700;color:#e2e8f0">About ContractIQ</div>
-      <div style="color:#63b3ed;font-size:0.85rem;font-weight:600;letter-spacing:0.05em">THE WORLD'S FIRST MULTI-SIGNAL SEMANTIC CONTRACT DEVIATION ENGINE</div>
-    </div>
+  <div style="margin-bottom:1rem">
+    <div style="font-size:1.5rem;font-weight:700;color:#e2e8f0;margin-bottom:0.3rem">⚖️ About ContractIQ</div>
+    <div style="color:#63b3ed;font-size:0.82rem;font-weight:600;letter-spacing:0.06em">THE WORLD'S FIRST MULTI-SIGNAL SEMANTIC CONTRACT DEVIATION ENGINE</div>
   </div>
-  <p style="color:#94a3b8;line-height:1.8;font-size:0.95rem;margin-bottom:2rem">
+  <p style="color:#94a3b8;line-height:1.8;font-size:0.93rem;margin:0">
     ContractIQ is not a keyword scanner. It is not a template matcher. It is not a rules engine.
     It is a <b style="color:#e2e8f0">purpose-built AI system</b> that understands contract language
     the way a trained legal analyst does — by learning what standard clauses <i>should</i> look like,
@@ -474,169 +471,79 @@ else:
 </div>
 """, unsafe_allow_html=True)
 
-    st.markdown("""
-<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:2rem;margin:1rem 0">
-  <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0;margin-bottom:1.5rem">🧠 The CSDA Algorithm — Composite Semantic Deviation Analysis</div>
-  <p style="color:#94a3b8;line-height:1.8;font-size:0.9rem;margin-bottom:1.5rem">
-    At the core of ContractIQ is our proprietary <b style="color:#63b3ed">CSDA (Composite Semantic Deviation Analysis)</b> algorithm —
-    a novel, multi-signal framework that we designed and built from the ground up. No existing commercial or academic tool
-    implements this exact combination of signals. Here is exactly how it works:
-  </p>
+    st.markdown('<div style="font-size:1.05rem;font-weight:700;color:#e2e8f0;margin:1.5rem 0 1rem">🧠 The CSDA Algorithm — Composite Semantic Deviation Analysis</div>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#94a3b8;font-size:0.88rem;line-height:1.8;margin-bottom:1.2rem">At the core of ContractIQ is our proprietary <b style="color:#63b3ed">CSDA (Composite Semantic Deviation Analysis)</b> algorithm — a novel, multi-signal framework designed and built from the ground up. No existing commercial or academic tool implements this exact combination of signals.</p>', unsafe_allow_html=True)
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("""<div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.2);border-radius:10px;padding:1.2rem;height:100%">
+<div style="color:#63b3ed;font-weight:700;font-size:0.88rem;margin-bottom:0.6rem">① DeBERTa Clause Classifier</div>
+<div style="color:#94a3b8;font-size:0.82rem;line-height:1.7">A fine-tuned <b style="color:#cbd5e1">DeBERTa-v3</b> transformer classifies every paragraph into one of <b style="color:#cbd5e1">33 legal clause types</b> — trained on 3,688 real commercial contract spans. We use a dual-threshold system: minimum confidence 0.45 AND minimum gap 0.10 between top-2 predictions, ensuring only high-certainty classifications proceed to deviation analysis.</div>
+</div>""", unsafe_allow_html=True)
+        st.markdown("""<div style="background:rgba(246,173,85,0.06);border:1px solid rgba(246,173,85,0.2);border-radius:10px;padding:1.2rem;margin-top:1rem;height:100%">
+<div style="color:#f6ad55;font-weight:700;font-size:0.88rem;margin-bottom:0.6rem">③ Polarity Profile Violation</div>
+<div style="color:#94a3b8;font-size:0.82rem;line-height:1.7">Every clause type has a learned <b style="color:#cbd5e1">polarity profile</b> — the statistical frequency of obligation signals ("shall", "must", "not") vs. permission signals ("freely", "without restriction"). If a normally obligation-heavy clause contains permissive language, it is flagged as a <b style="color:#cbd5e1">polarity mismatch</b> — a signal that the power balance has been shifted.</div>
+</div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown("""<div style="background:rgba(104,211,145,0.06);border:1px solid rgba(104,211,145,0.2);border-radius:10px;padding:1.2rem;height:100%">
+<div style="color:#68d391;font-weight:700;font-size:0.88rem;margin-bottom:0.6rem">② Centroid-Based Semantic Distance</div>
+<div style="color:#94a3b8;font-size:0.82rem;line-height:1.7">Each clause is embedded using <b style="color:#cbd5e1">all-mpnet-base-v2</b> and compared against a <b style="color:#cbd5e1">per-clause centroid</b> — the mean embedding of all training examples for that clause type. Cosine distance is compared against a statistically derived threshold (90th percentile). Clauses outside this boundary are semantically anomalous — their language pattern is statistically unusual for their type.</div>
+</div>""", unsafe_allow_html=True)
+        st.markdown("""<div style="background:rgba(252,129,129,0.06);border:1px solid rgba(252,129,129,0.2);border-radius:10px;padding:1.2rem;margin-top:1rem;height:100%">
+<div style="color:#fc8181;font-weight:700;font-size:0.88rem;margin-bottom:0.6rem">④ Per-Clause Invariant Rules</div>
+<div style="color:#94a3b8;font-size:0.82rem;line-height:1.7">For each of the 12 highest-risk clause types, we define <b style="color:#cbd5e1">hard invariants</b>: forbidden patterns (e.g. "unlimited liability" in Cap On Liability), negation detection (e.g. "no right to audit" in Audit Rights), missing required keywords, and unilateral rights signals. These are non-negotiable legal red lines no standard contract should cross.</div>
+</div>""", unsafe_allow_html=True)
 
-    <div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:10px;padding:1.2rem">
-      <div style="color:#63b3ed;font-weight:700;font-size:0.9rem;margin-bottom:0.5rem">① DeBERTa Clause Classifier</div>
-      <div style="color:#94a3b8;font-size:0.83rem;line-height:1.7">
-        A fine-tuned <b style="color:#cbd5e1">DeBERTa-v3</b> transformer model classifies every paragraph of the contract
-        into one of <b style="color:#cbd5e1">33 legal clause types</b> — trained on 3,688 real commercial contract spans.
-        Unlike simple keyword matching, DeBERTa understands full sentence context, negation, and legal phrasing nuance.
-        We use a dual-threshold system: a minimum confidence of 0.45 AND a minimum gap of 0.10 between the top-2 predictions,
-        ensuring only high-certainty classifications proceed to deviation analysis.
-      </div>
-    </div>
+    st.markdown("""<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.25);border-radius:10px;padding:1.2rem;margin-top:1rem">
+<div style="color:#63b3ed;font-weight:700;font-size:0.88rem;margin-bottom:0.6rem">⑤ Composite Deviation Score (0.0 – 1.0)</div>
+<div style="color:#94a3b8;font-size:0.82rem;line-height:1.7">The four signals are fused into a single score. Semantic distance contributes up to <b style="color:#cbd5e1">0.5</b> (proportional to how far beyond the threshold the clause falls), and each additional signal adds <b style="color:#cbd5e1">0.15</b>. This drives severity: <b style="color:#fc8181">High</b> (invariant violations, uncapped liability, negated obligations) · <b style="color:#f6ad55">Medium</b> (polarity mismatch, semantic deviation) · <b style="color:#68d391">Low</b> (minor keyword gaps). No other publicly available tool uses this composite scoring approach.</div>
+</div>""", unsafe_allow_html=True)
 
-    <div style="background:rgba(104,211,145,0.06);border:1px solid rgba(104,211,145,0.15);border-radius:10px;padding:1.2rem">
-      <div style="color:#68d391;font-weight:700;font-size:0.9rem;margin-bottom:0.5rem">② Centroid-Based Semantic Distance</div>
-      <div style="color:#94a3b8;font-size:0.83rem;line-height:1.7">
-        Each classified clause is embedded using <b style="color:#cbd5e1">all-mpnet-base-v2</b> and compared against
-        a <b style="color:#cbd5e1">per-clause centroid</b> — the mean embedding of all training examples for that clause type.
-        The cosine distance to this centroid is compared against a <b style="color:#cbd5e1">statistically derived threshold</b>
-        (90th percentile of training distances). Clauses that fall outside this boundary are semantically anomalous —
-        their language pattern is statistically unusual for their type. This is the first signal.
-      </div>
-    </div>
+    st.markdown("")
+    m1, m2, m3 = st.columns(3)
+    m1.markdown('<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:1.2rem;text-align:center"><div style="font-size:2rem;font-weight:700;color:#63b3ed">33</div><div style="color:#64748b;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;margin-top:4px">Clause Types</div><div style="color:#94a3b8;font-size:0.78rem;margin-top:0.4rem">Full spectrum of commercial contract clauses</div></div>', unsafe_allow_html=True)
+    m2.markdown('<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:1.2rem;text-align:center"><div style="font-size:2rem;font-weight:700;color:#68d391">4</div><div style="color:#64748b;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;margin-top:4px">Detection Signals</div><div style="color:#94a3b8;font-size:0.78rem;margin-top:0.4rem">Semantic · Polarity · Invariant · Composite</div></div>', unsafe_allow_html=True)
+    m3.markdown('<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:1.2rem;text-align:center"><div style="font-size:2rem;font-weight:700;color:#f6ad55">3,688</div><div style="color:#64748b;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;margin-top:4px">Training Samples</div><div style="color:#94a3b8;font-size:0.78rem;margin-top:0.4rem">Real commercial contract spans</div></div>', unsafe_allow_html=True)
 
-    <div style="background:rgba(246,173,85,0.06);border:1px solid rgba(246,173,85,0.15);border-radius:10px;padding:1.2rem">
-      <div style="color:#f6ad55;font-weight:700;font-size:0.9rem;margin-bottom:0.5rem">③ Polarity Profile Violation</div>
-      <div style="color:#94a3b8;font-size:0.83rem;line-height:1.7">
-        Every clause type has a learned <b style="color:#cbd5e1">polarity profile</b> — the statistical frequency of
-        obligation signals ("shall", "must", "not") vs. permission signals ("may", "freely", "without restriction")
-        across all training examples. A weighted obligation score is computed per clause type.
-        If a clause that is normally obligation-heavy contains permissive language, it is flagged as a
-        <b style="color:#cbd5e1">polarity mismatch</b> — a signal that the power balance has been shifted. This is the second signal.
-      </div>
-    </div>
+    st.markdown("")
+    p1, p2 = st.columns(2)
+    with p1:
+        st.markdown("""<div style="background:rgba(104,211,145,0.04);border:1px solid rgba(104,211,145,0.15);border-radius:12px;padding:1.2rem">
+<div style="font-size:0.95rem;font-weight:700;color:#e2e8f0;margin-bottom:0.8rem">🔒 Privacy-First Architecture</div>
+<div style="color:#94a3b8;font-size:0.82rem;line-height:1.8">
+<b style="color:#68d391">✓ Raw contract text never leaves your session.</b><br>
+All ML inference runs on the server in-memory.<br>
+The LLM receives only structured metadata — clause types, deviation flags, severity scores.<br>
+No contract content is stored, logged, or transmitted to any third party.
+</div></div>""", unsafe_allow_html=True)
+    with p2:
+        st.markdown("""<div style="background:rgba(99,179,237,0.04);border:1px solid rgba(99,179,237,0.15);border-radius:12px;padding:1.2rem">
+<div style="font-size:0.95rem;font-weight:700;color:#e2e8f0;margin-bottom:0.8rem">🔍 Fully Explainable Outputs</div>
+<div style="color:#94a3b8;font-size:0.82rem;line-height:1.8">
+<b style="color:#63b3ed">✓ Every flag is traceable and explained.</b><br>
+Every deviation comes with a plain-English reason.<br>
+Every confidence score is shown. Every signal is visible.<br>
+ContractIQ augments human review — it does not replace it.
+</div></div>""", unsafe_allow_html=True)
 
-    <div style="background:rgba(252,129,129,0.06);border:1px solid rgba(252,129,129,0.15);border-radius:10px;padding:1.2rem">
-      <div style="color:#fc8181;font-weight:700;font-size:0.9rem;margin-bottom:0.5rem">④ Per-Clause Invariant Rules</div>
-      <div style="color:#94a3b8;font-size:0.83rem;line-height:1.7">
-        For each of the 12 highest-risk clause types, we define a set of <b style="color:#cbd5e1">hard invariants</b>:
-        forbidden patterns (e.g. "unlimited liability" in a Cap On Liability clause),
-        negation detection (e.g. "no right to audit" in an Audit Rights clause),
-        missing required keywords (e.g. absence of "consent" in an Anti-Assignment clause),
-        and unilateral rights signals. These are non-negotiable legal red lines that no standard contract should cross.
-        This is the third signal.
-      </div>
-    </div>
+    st.markdown("""<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.5rem;margin-top:1rem">
+<div style="font-size:0.95rem;font-weight:700;color:#e2e8f0;margin-bottom:1rem">🆚 How ContractIQ Compares</div>
+<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+<tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+  <th style="text-align:left;color:#64748b;padding:0.5rem 0.8rem;font-weight:600">Capability</th>
+  <th style="text-align:center;color:#63b3ed;padding:0.5rem;font-weight:600">ContractIQ</th>
+  <th style="text-align:center;color:#64748b;padding:0.5rem;font-weight:600">Keyword Tools</th>
+  <th style="text-align:center;color:#64748b;padding:0.5rem;font-weight:600">Generic LLM</th>
+</tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td style="color:#94a3b8;padding:0.5rem 0.8rem">Understands clause context</td><td style="text-align:center;color:#68d391">✓ DeBERTa</td><td style="text-align:center;color:#fc8181">✗</td><td style="text-align:center;color:#f6ad55">Partial</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td style="color:#94a3b8;padding:0.5rem 0.8rem">Semantic deviation scoring</td><td style="text-align:center;color:#68d391">✓ CSDA</td><td style="text-align:center;color:#fc8181">✗</td><td style="text-align:center;color:#fc8181">✗</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td style="color:#94a3b8;padding:0.5rem 0.8rem">Polarity profile analysis</td><td style="text-align:center;color:#68d391">✓ Learned</td><td style="text-align:center;color:#fc8181">✗</td><td style="text-align:center;color:#fc8181">✗</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td style="color:#94a3b8;padding:0.5rem 0.8rem">Privacy-safe (no raw text to LLM)</td><td style="text-align:center;color:#68d391">✓</td><td style="text-align:center;color:#68d391">✓</td><td style="text-align:center;color:#fc8181">✗</td></tr>
+<tr><td style="color:#94a3b8;padding:0.5rem 0.8rem">Composite deviation score</td><td style="text-align:center;color:#68d391">✓ 0.0–1.0</td><td style="text-align:center;color:#fc8181">✗</td><td style="text-align:center;color:#fc8181">✗</td></tr>
+</table>
+</div>""", unsafe_allow_html=True)
 
-  </div>
-
-  <div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:10px;padding:1.2rem;margin-top:1.5rem">
-    <div style="color:#63b3ed;font-weight:700;font-size:0.9rem;margin-bottom:0.5rem">⑤ Composite Deviation Score</div>
-    <div style="color:#94a3b8;font-size:0.83rem;line-height:1.7">
-      The four signals are fused into a single <b style="color:#cbd5e1">Composite Deviation Score (0.0–1.0)</b>.
-      Semantic distance contributes up to 0.5 of the score (proportional to how far beyond the threshold the clause falls),
-      and each additional signal adds 0.15. This score drives severity classification:
-      <b style="color:#fc8181">High</b> (invariant violations, uncapped liability, negated obligations),
-      <b style="color:#f6ad55">Medium</b> (polarity mismatch, semantic deviation),
-      <b style="color:#68d391">Low</b> (minor keyword gaps).
-      No other publicly available contract analysis tool uses this composite scoring approach.
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-    st.markdown("""
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1rem 0">
-  <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.5rem;text-align:center">
-    <div style="font-size:2rem;font-weight:700;color:#63b3ed">33</div>
-    <div style="color:#64748b;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-top:4px">Clause Types</div>
-    <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.5rem">Covering the full spectrum of commercial contract clauses</div>
-  </div>
-  <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.5rem;text-align:center">
-    <div style="font-size:2rem;font-weight:700;color:#68d391">4</div>
-    <div style="color:#64748b;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-top:4px">Detection Signals</div>
-    <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.5rem">Semantic + Polarity + Invariant + Composite scoring</div>
-  </div>
-  <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.5rem;text-align:center">
-    <div style="font-size:2rem;font-weight:700;color:#f6ad55">3,688</div>
-    <div style="color:#64748b;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-top:4px">Training Samples</div>
-    <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.5rem">Real commercial contract spans used to train the classifier</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-    st.markdown("""
-<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:2rem;margin:1rem 0">
-  <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0;margin-bottom:1.2rem">🔒 Privacy-First Architecture</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-    <div style="color:#94a3b8;font-size:0.85rem;line-height:1.7">
-      <b style="color:#68d391">✓ Raw contract text never leaves your browser session.</b><br>
-      All ML inference (DeBERTa, SentenceTransformer) runs on the server in-memory.<br>
-      The LLM (Groq) receives only structured metadata — clause types, deviation flags, severity scores.<br>
-      No contract content is stored, logged, or transmitted to any third party.
-    </div>
-    <div style="color:#94a3b8;font-size:0.85rem;line-height:1.7">
-      <b style="color:#68d391">✓ Fully explainable outputs.</b><br>
-      Every deviation flag comes with a plain-English explanation of why it was raised.<br>
-      Every confidence score is shown. Every signal is traceable.<br>
-      ContractIQ is designed to augment human review, not replace it.
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-    st.markdown("""
-<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:2rem;margin:1rem 0">
-  <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0;margin-bottom:1.2rem">🆚 How ContractIQ Compares</div>
-  <table style="width:100%;border-collapse:collapse;font-size:0.83rem">
-    <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-      <th style="text-align:left;color:#64748b;padding:0.5rem;font-weight:600">Capability</th>
-      <th style="text-align:center;color:#63b3ed;padding:0.5rem;font-weight:600">ContractIQ</th>
-      <th style="text-align:center;color:#64748b;padding:0.5rem;font-weight:600">Keyword Tools</th>
-      <th style="text-align:center;color:#64748b;padding:0.5rem;font-weight:600">Generic LLM</th>
-    </tr>
-    <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
-      <td style="color:#94a3b8;padding:0.5rem">Understands clause context</td>
-      <td style="text-align:center;color:#68d391;padding:0.5rem">✓ DeBERTa</td>
-      <td style="text-align:center;color:#fc8181;padding:0.5rem">✗</td>
-      <td style="text-align:center;color:#f6ad55;padding:0.5rem">Partial</td>
-    </tr>
-    <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
-      <td style="color:#94a3b8;padding:0.5rem">Semantic deviation scoring</td>
-      <td style="text-align:center;color:#68d391;padding:0.5rem">✓ CSDA</td>
-      <td style="text-align:center;color:#fc8181;padding:0.5rem">✗</td>
-      <td style="text-align:center;color:#fc8181;padding:0.5rem">✗</td>
-    </tr>
-    <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
-      <td style="color:#94a3b8;padding:0.5rem">Polarity profile analysis</td>
-      <td style="text-align:center;color:#68d391;padding:0.5rem">✓ Learned</td>
-      <td style="text-align:center;color:#fc8181;padding:0.5rem">✗</td>
-      <td style="text-align:center;color:#fc8181;padding:0.5rem">✗</td>
-    </tr>
-    <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
-      <td style="color:#94a3b8;padding:0.5rem">Privacy-safe (no raw text to LLM)</td>
-      <td style="text-align:center;color:#68d391;padding:0.5rem">✓</td>
-      <td style="text-align:center;color:#68d391;padding:0.5rem">✓</td>
-      <td style="text-align:center;color:#fc8181;padding:0.5rem">✗</td>
-    </tr>
-    <tr>
-      <td style="color:#94a3b8;padding:0.5rem">Composite deviation score</td>
-      <td style="text-align:center;color:#68d391;padding:0.5rem">✓ 0.0–1.0</td>
-      <td style="text-align:center;color:#fc8181;padding:0.5rem">✗</td>
-      <td style="text-align:center;color:#fc8181;padding:0.5rem">✗</td>
-    </tr>
-  </table>
-</div>
-""", unsafe_allow_html=True)
-
-    st.markdown("""
-<div style="text-align:center;padding:2rem;color:#475569;font-size:0.82rem">
-  <i>ContractIQ was developed as a final year research project by Team 2022AIE01.<br>
-  The CSDA algorithm is an original contribution. Not legal advice.</i>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown('<div style="text-align:center;padding:1.5rem;color:#475569;font-size:0.78rem"><i>ContractIQ was developed as a final year research project by Team 2022AIE01. The CSDA algorithm is an original contribution. Not legal advice.</i></div>', unsafe_allow_html=True)
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="footer">
