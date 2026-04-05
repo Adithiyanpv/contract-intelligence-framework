@@ -700,6 +700,135 @@ Extracts who owes what to whom, detects one-sided contracts, and flags missing r
 
                 st.markdown(f'<div style="text-align:center;color:{bs_color};font-size:0.85rem;margin:0.5rem 0">Contract obligation balance: <b>{bs_label}</b></div>', unsafe_allow_html=True)
 
+                # ── D3 Force-Directed Graph ────────────────────────────────
+                st.markdown('<p class="section-header">Obligation Network Graph</p>', unsafe_allow_html=True)
+                st.caption("Nodes = parties · Arrows = obligations · Arrow thickness = obligation count · Red nodes = high obligation load")
+
+                import json as _json
+                _nodes = [{"id": p, "obligations": g["obligation_counts"].get(p, {}).get("obligation", 0),
+                           "permissions": g["obligation_counts"].get(p, {}).get("permission", 0),
+                           "prohibitions": g["obligation_counts"].get(p, {}).get("prohibition", 0)}
+                          for p in g["nodes"]]
+                _links = []
+                for _from, _targets in g["adjacency"].items():
+                    for _to, _count in _targets.items():
+                        if _to != "General":
+                            _links.append({"source": _from, "target": _to, "value": _count})
+
+                _graph_data = _json.dumps({"nodes": _nodes, "links": _links})
+                _max_ob = max((n["obligations"] for n in _nodes), default=1)
+
+                st.components.v1.html(f"""
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  body {{ margin:0; background:#0f1117; font-family:'Inter',sans-serif; }}
+  .node circle {{ stroke:#1e2433; stroke-width:2px; cursor:pointer; }}
+  .node text {{ fill:#e2e8f0; font-size:12px; font-weight:600; pointer-events:none; }}
+  .link {{ fill:none; stroke-opacity:0.7; }}
+  .link-label {{ fill:#64748b; font-size:10px; }}
+  .tooltip {{ position:absolute; background:#1e2433; border:1px solid #2d3748;
+              border-radius:8px; padding:8px 12px; color:#e2e8f0; font-size:12px;
+              pointer-events:none; opacity:0; transition:opacity 0.2s; }}
+  .legend {{ position:absolute; bottom:10px; left:10px; }}
+  .legend-item {{ display:flex; align-items:center; gap:6px; margin:3px 0; font-size:11px; color:#94a3b8; }}
+</style>
+</head>
+<body>
+<div id="tooltip" class="tooltip"></div>
+<svg id="graph" width="100%" height="480"></svg>
+<div class="legend">
+  <div class="legend-item"><svg width="12" height="12"><circle cx="6" cy="6" r="6" fill="#fc8181"/></svg> High obligation load</div>
+  <div class="legend-item"><svg width="12" height="12"><circle cx="6" cy="6" r="6" fill="#63b3ed"/></svg> Moderate</div>
+  <div class="legend-item"><svg width="12" height="12"><circle cx="6" cy="6" r="6" fill="#68d391"/></svg> Low</div>
+  <div class="legend-item"><svg width="20" height="4"><line x1="0" y1="2" x2="20" y2="2" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/></svg> Obligation flow</div>
+</div>
+<script>
+const data = {_graph_data};
+const maxOb = {_max_ob};
+const width = document.getElementById("graph").clientWidth || 700;
+const height = 480;
+const svg = d3.select("#graph").attr("viewBox", [0,0,width,height]);
+const tooltip = d3.select("#tooltip");
+
+// Arrow markers
+const defs = svg.append("defs");
+["#fc8181","#63b3ed","#68d391","#94a3b8"].forEach((color,i) => {{
+  defs.append("marker").attr("id","arr"+i).attr("viewBox","0 -5 10 10")
+    .attr("refX",22).attr("refY",0).attr("markerWidth",6).attr("markerHeight",6)
+    .attr("orient","auto")
+    .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",color);
+}});
+
+const nodeColor = d => {{
+  const ratio = d.obligations / Math.max(maxOb,1);
+  if (ratio > 0.6) return "#fc8181";
+  if (ratio > 0.3) return "#63b3ed";
+  return "#68d391";
+}};
+const markerIdx = d => {{
+  const ratio = (data.nodes.find(n=>n.id===d.source.id||n.id===d.source)?.obligations||0)/Math.max(maxOb,1);
+  return ratio > 0.6 ? 0 : ratio > 0.3 ? 1 : 2;
+}};
+
+const sim = d3.forceSimulation(data.nodes)
+  .force("link", d3.forceLink(data.links).id(d=>d.id).distance(160))
+  .force("charge", d3.forceManyBody().strength(-400))
+  .force("center", d3.forceCenter(width/2, height/2))
+  .force("collision", d3.forceCollide(50));
+
+const link = svg.append("g").selectAll("path")
+  .data(data.links).join("path")
+  .attr("class","link")
+  .attr("stroke", d => nodeColor(data.nodes.find(n=>n.id===(d.source.id||d.source))||{{obligations:0}}))
+  .attr("stroke-width", d => Math.max(1.5, d.value*2))
+  .attr("marker-end", d => `url(#arr${{markerIdx(d)}})`);
+
+const node = svg.append("g").selectAll("g")
+  .data(data.nodes).join("g").attr("class","node")
+  .call(d3.drag()
+    .on("start", (e,d) => {{ if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; }})
+    .on("drag",  (e,d) => {{ d.fx=e.x; d.fy=e.y; }})
+    .on("end",   (e,d) => {{ if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }}));
+
+node.append("circle")
+  .attr("r", d => 20 + d.obligations*3)
+  .attr("fill", nodeColor)
+  .attr("fill-opacity", 0.85)
+  .on("mouseover", (e,d) => {{
+    tooltip.style("opacity",1)
+      .html(`<b>${{d.id}}</b><br>Obligations: ${{d.obligations}}<br>Permissions: ${{d.permissions}}<br>Prohibitions: ${{d.prohibitions}}`)
+      .style("left",(e.offsetX+12)+"px").style("top",(e.offsetY-10)+"px");
+  }})
+  .on("mouseout", () => tooltip.style("opacity",0));
+
+node.append("text").text(d=>d.id).attr("text-anchor","middle").attr("dy","0.35em")
+  .style("font-size", d => d.id.length > 10 ? "10px" : "12px");
+
+// Link labels
+svg.append("g").selectAll("text").data(data.links).join("text")
+  .attr("class","link-label").text(d=>`${{d.value}} obligation${{d.value>1?"s":""}}`)
+  .attr("text-anchor","middle");
+
+sim.on("tick", () => {{
+  link.attr("d", d => {{
+    const dx=d.target.x-d.source.x, dy=d.target.y-d.source.y;
+    const dr=Math.sqrt(dx*dx+dy*dy)*1.5;
+    return `M${{d.source.x}},${{d.source.y}}A${{dr}},${{dr}} 0 0,1 ${{d.target.x}},${{d.target.y}}`;
+  }});
+  node.attr("transform", d=>`translate(${{d.x}},${{d.y}})`);
+  svg.selectAll(".link-label")
+    .attr("x", d=>(d.source.x+d.target.x)/2)
+    .attr("y", d=>(d.source.y+d.target.y)/2-8);
+}});
+</script>
+</body>
+</html>
+""", height=500)
+
+
                 # ── Obligation matrix ──────────────────────────────────────
                 st.markdown('<p class="section-header">Obligation Matrix (Party × Party)</p>', unsafe_allow_html=True)
                 st.caption("Each cell shows how many obligations flow from the row party to the column party")
