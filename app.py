@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -654,16 +654,16 @@ ContractIQ augments human review — it does not replace it.
 Switch to <b style="color:#63b3ed">Multi-Document</b> mode in the sidebar to upload and compare multiple contracts simultaneously.
 <br><br>Use cases: contract version comparison · master + amendments · vendor portfolio risk · counterparty benchmarking.
 </div>""", unsafe_allow_html=True)
-        else:
-            import pandas as pd
-            agg = st.session_state.multi_doc_results
-            raw = st.session_state.get("multi_doc_raw", [])
+            else:
+                import pandas as pd
+                agg = st.session_state.multi_doc_results
+                raw = st.session_state.get("multi_doc_raw", [])
 
-            # ── Overview cards ──────────────────────────────────────────────
-            st.markdown(f'<div style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">Comparing <b style="color:#63b3ed">{agg["n_docs"]} documents</b></div>', unsafe_allow_html=True)
+                # ── Overview cards ──────────────────────────────────────────────
+                st.markdown(f'<div style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">Comparing <b style="color:#63b3ed">{agg["n_docs"]} documents</b></div>', unsafe_allow_html=True)
 
-            cols = st.columns(len(agg["doc_overviews"]))
-            for col, ov in zip(cols, agg["doc_overviews"]):
+                cols = st.columns(len(agg["doc_overviews"]))
+                for col, ov in zip(cols, agg["doc_overviews"]):
                 dev_color = "#fc8181" if ov["deviation_rate"] > 0.3 else "#f6ad55" if ov["deviation_rate"] > 0.1 else "#68d391"
                 col.markdown(f"""<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:1rem;text-align:center">
 <div style="font-size:0.75rem;color:#64748b;margin-bottom:0.4rem;word-break:break-all">{ov["document"][:30]}</div>
@@ -672,42 +672,42 @@ Switch to <b style="color:#63b3ed">Multi-Document</b> mode in the sidebar to upl
 <div style="font-size:0.78rem;color:#94a3b8;margin-top:0.4rem">{ov["deviating"]} / {ov["recognized"]} clauses</div>
 </div>""", unsafe_allow_html=True)
 
-            # ── Heatmap ─────────────────────────────────────────────────────
-            st.markdown('<p class="section-header" style="margin-top:1.5rem">Clause × Document Heatmap</p>', unsafe_allow_html=True)
-            st.caption("⚠️ = Deviating  ·  ✅ = Present, no deviation  ·  — = Not found in this document")
-            heatmap_df = build_heatmap_dataframe(agg)
-            st.dataframe(heatmap_df, use_container_width=True)
+                # ── Heatmap ─────────────────────────────────────────────────────
+                st.markdown('<p class="section-header" style="margin-top:1.5rem">Clause × Document Heatmap</p>', unsafe_allow_html=True)
+                st.caption("⚠️ = Deviating  ·  ✅ = Present, no deviation  ·  — = Not found in this document")
+                heatmap_df = build_heatmap_dataframe(agg)
+                st.dataframe(heatmap_df, use_container_width=True)
 
-            # ── Systemic risks ──────────────────────────────────────────────
-            if agg["systemic_risks"]:
+                # ── Systemic risks ──────────────────────────────────────────────
+                if agg["systemic_risks"]:
                 st.markdown('<p class="section-header">🔴 Systemic Risks — Deviating Across All Documents</p>', unsafe_allow_html=True)
                 for sr in agg["systemic_risks"]:
                     st.markdown(f'<div style="background:rgba(252,129,129,0.08);border-left:3px solid #fc8181;border-radius:0 8px 8px 0;padding:0.7rem 1rem;margin:0.3rem 0;color:#e2e8f0;font-size:0.88rem"><b>{sr["clause"]}</b> <span style="color:#fc8181;font-size:0.78rem">— deviating in all {len(sr["affected_docs"])} documents</span></div>', unsafe_allow_html=True)
-            else:
+                else:
                 st.success("✅ No systemic risks detected across all documents.")
 
-            # ── Isolated risks ──────────────────────────────────────────────
-            if agg["isolated_risks"]:
+                # ── Isolated risks ──────────────────────────────────────────────
+                if agg["isolated_risks"]:
                 st.markdown('<p class="section-header">🟡 Isolated Risks — Deviating in Only One Document</p>', unsafe_allow_html=True)
                 for ir in agg["isolated_risks"]:
                     doc = ir["affected_docs"][0] if ir["affected_docs"] else "unknown"
                     st.markdown(f'<div style="background:rgba(246,173,85,0.06);border-left:3px solid #f6ad55;border-radius:0 8px 8px 0;padding:0.7rem 1rem;margin:0.3rem 0;color:#e2e8f0;font-size:0.88rem"><b>{ir["clause"]}</b> <span style="color:#f6ad55;font-size:0.78rem">— only in: {doc}</span></div>', unsafe_allow_html=True)
 
-            # ── Risk ranking ────────────────────────────────────────────────
-            if agg["risk_ranking"]:
+                # ── Risk ranking ────────────────────────────────────────────────
+                if agg["risk_ranking"]:
                 st.markdown('<p class="section-header">Clause Risk Ranking</p>', unsafe_allow_html=True)
                 rank_rows = [{"Clause": c, "Deviation Rate": f"{r:.0%}", "Deviating In": f"{d}/{agg['clause_deviation_rates'][c]['present_in']} docs"} for c, r, d in agg["risk_ranking"]]
                 st.dataframe(pd.DataFrame(rank_rows), use_container_width=True, hide_index=True)
 
-            # ── Top deviation reasons ───────────────────────────────────────
-            if agg["top_reasons"]:
+                # ── Top deviation reasons ───────────────────────────────────────
+                if agg["top_reasons"]:
                 st.markdown('<p class="section-header">Most Common Deviation Signals</p>', unsafe_allow_html=True)
                 for reason, count in agg["top_reasons"][:6]:
                     pct = count / sum(c for _, c in agg["top_reasons"])
                     st.markdown(f'<div style="display:flex;align-items:center;gap:0.8rem;margin:0.3rem 0"><span style="color:#94a3b8;font-size:0.82rem;min-width:280px">{reason}</span><div style="flex:1;background:rgba(255,255,255,0.05);border-radius:4px;height:6px"><div style="background:#63b3ed;width:{pct:.0%};height:6px;border-radius:4px"></div></div><span style="color:#63b3ed;font-size:0.78rem;min-width:30px">{count}x</span></div>', unsafe_allow_html=True)
 
-            # ── Per-document detail ─────────────────────────────────────────
-            if raw:
+                # ── Per-document detail ─────────────────────────────────────────
+                if raw:
                 st.markdown('<p class="section-header">Per-Document Breakdown</p>', unsafe_allow_html=True)
                 for doc in raw:
                     dev_count = int(doc["clause_df"]["final_deviation"].sum())
