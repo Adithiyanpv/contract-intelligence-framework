@@ -200,6 +200,7 @@ if analyze_clicked:
         st.session_state.summary_narration = summary_narration
         st.session_state.last_answer = None
         st.session_state.analyzed = True
+        st.session_state.contract_doc_summary = None  # clear stale summary on new analysis
         st.session_state.multi_doc_results = None
 
         # Multi-doc: analyze remaining documents
@@ -389,7 +390,7 @@ setTimeout(clickTab,300);
                 st.session_state.contract_doc_summary = {"summary": doc_summary, "metrics": metrics}
                 st.query_params["tab"] = "summary"
 
-        if "contract_doc_summary" in st.session_state and st.session_state.contract_doc_summary:
+        if "contract_doc_summary" in st.session_state and st.session_state.contract_doc_summary and "overall_summary" in st.session_state.contract_doc_summary.get("summary", {}):
             ds = st.session_state.contract_doc_summary["summary"]
             mt = st.session_state.contract_doc_summary["metrics"]
 
