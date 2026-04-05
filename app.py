@@ -224,12 +224,6 @@ setTimeout(clickTab,300);
             col.markdown(f'<div class="metric-card"><div class="val">{val}</div><div class="lbl">{lbl}</div></div>', unsafe_allow_html=True)
 
         st.markdown("")
-        if summary["deviations"]:
-            st.markdown('<p class="section-header">Risk Snapshot</p>', unsafe_allow_html=True)
-            for d in summary["deviations"]:
-                st.markdown(risk_card(d["clause"], d["reasons"], d.get("severity","Medium")), unsafe_allow_html=True)
-        else:
-            st.success("✅ No non-standard clause patterns detected.")
 
         st.markdown('<p class="section-header">Clause Coverage</p>', unsafe_allow_html=True)
         counts = summary["coverage"].get("clause_counts", {})
@@ -238,6 +232,16 @@ setTimeout(clickTab,300);
             for c in summary["coverage"]["detected_clauses"]
         )
         st.markdown(f'<div style="line-height:2.2">{coverage_html}</div>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#334155;font-size:0.75rem;margin-top:1.5rem">Deviation detection uses semantic similarity, polarity analysis, and clause-specific rules. Not legal advice.</p>', unsafe_allow_html=True)
+    # ── TAB 2: DEVIATING CLAUSES ─────────────────────────────────────────────
+    with tab2:
+        if summary["deviations"]:
+            st.markdown('<p class="section-header">Risk Snapshot</p>', unsafe_allow_html=True)
+            for d in summary["deviations"]:
+                st.markdown(risk_card(d["clause"], d["reasons"], d.get("severity","Medium")), unsafe_allow_html=True)
+        else:
+            st.success("✅ No non-standard clause patterns detected.")
+
 
         st.markdown('<p class="section-header">Clause Text Mapping</p>', unsafe_allow_html=True)
         for clause_name in sorted(clause_df["final_clause"].unique()):
@@ -257,8 +261,6 @@ setTimeout(clickTab,300);
 
         st.markdown('<p style="color:#334155;font-size:0.75rem;margin-top:2rem">Deviation detection uses semantic similarity, polarity analysis, and clause-specific rules. Not legal advice.</p>', unsafe_allow_html=True)
 
-    # ── TAB 2: DEVIATING CLAUSES ─────────────────────────────────────────────
-    with tab2:
         deviating = clause_df[clause_df["final_deviation"]]
         if deviating.empty:
             st.success("✅ No deviating clauses detected in this contract.")
