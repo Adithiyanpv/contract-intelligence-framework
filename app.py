@@ -17,9 +17,10 @@ from llm.llm_client import get_llm_client, build_safe_prompt
 from pipeline import (analyze_document, ask_document, build_contract_summary,
                       narrate_contract_summary, export_results_csv, export_results_json)
 from summarizer.contract_summarizer import summarize_contract, evaluate_summary
+from multi_doc.aggregator import aggregate_documents, build_heatmap_dataframe
 
 # ── Session state ──────────────────────────────────────────────────────────────
-for k, v in [("analyzed", False), ("last_answer", None), ("contract_doc_summary", None)]:
+for k, v in [("analyzed", False), ("last_answer", None), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -140,10 +141,19 @@ with st.sidebar:
     else:
         st.warning("🟡 No LLM · Add GROQ_API_KEY to secrets")
 
-    st.markdown('<p class="section-header">Upload Contract</p>', unsafe_allow_html=True)
-    uploaded_pdf = st.file_uploader("", type=["pdf"], label_visibility="collapsed")
+    st.markdown('<p class="section-header">Analysis Mode</p>', unsafe_allow_html=True)
+    mode = st.radio("", ["Single Document", "Multi-Document"], label_visibility="collapsed", horizontal=True)
+    st.session_state.analysis_mode = "multi" if mode == "Multi-Document" else "single"
 
-    analyze_clicked = st.button("▶  Analyze Contract", use_container_width=True)
+    st.markdown('<p class="section-header">Upload Contract(s)</p>', unsafe_allow_html=True)
+    if st.session_state.analysis_mode == "single":
+        uploaded_pdfs = st.file_uploader("", type=["pdf"], label_visibility="collapsed", accept_multiple_files=False)
+        uploaded_pdfs = [uploaded_pdfs] if uploaded_pdfs else []
+    else:
+        st.caption("Upload 2–5 contracts to compare")
+        uploaded_pdfs = st.file_uploader("", type=["pdf"], label_visibility="collapsed", accept_multiple_files=True)
+
+    analyze_clicked = st.button("▶  Analyze Contract(s)", use_container_width=True)
 
     if st.session_state.analyzed:
         st.markdown('<p class="section-header">Export</p>', unsafe_allow_html=True)
@@ -154,28 +164,34 @@ with st.sidebar:
                            file_name="contractiq_analysis.csv", mime="text/csv", use_container_width=True)
         st.download_button("⬇ JSON Report", data=export_results_json(clause_df, spans, summary),
                            file_name="contractiq_analysis.json", mime="application/json", use_container_width=True)
-
     st.markdown("---")
     st.markdown('<p style="color:#334155;font-size:0.72rem;text-align:center">ContractIQ v2.0<br>© 2026 Team 2022AIE01<br>Not legal advice</p>', unsafe_allow_html=True)
 
 # ── Analyze ────────────────────────────────────────────────────────────────────
 if analyze_clicked:
-    if uploaded_pdf is None:
-        st.error("Please upload a PDF file first.")
+    if not uploaded_pdfs:
+        st.error("Please upload at least one PDF file.")
     else:
+        is_multi = st.session_state.analysis_mode == "multi" and len(uploaded_pdfs) > 1
         progress_bar = st.progress(0, text="Initializing analysis pipeline...")
+
         def update_progress(step, total, msg):
             pct = int((step / max(total, 1)) * 100)
             progress_bar.progress(pct, text=msg)
+
+        # Always analyze the first (or only) doc as the primary
+        primary_pdf = uploaded_pdfs[0]
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(uploaded_pdf.read())
+            tmp.write(primary_pdf.read())
             pdf_path = tmp.name
+
         clause_df, spans, embeddings, embedder = analyze_document(pdf_path, progress_callback=update_progress)
-        progress_bar.progress(100, text="Finalizing...")
+        progress_bar.progress(100, text="Finalizing primary document...")
         clause_df["_known"] = clause_df["final_clause"] != "Unknown"
         clause_df = clause_df.sort_values(by=["_known","span_id"], ascending=[False,True]).drop(columns="_known").reset_index(drop=True)
         contract_summary = build_contract_summary(clause_df, spans)
         summary_narration = narrate_contract_summary(contract_summary, llm_client=llm)
+
         st.session_state.clause_df = clause_df
         st.session_state.spans = spans
         st.session_state.embeddings = embeddings
@@ -184,21 +200,47 @@ if analyze_clicked:
         st.session_state.summary_narration = summary_narration
         st.session_state.last_answer = None
         st.session_state.analyzed = True
+        st.session_state.multi_doc_results = None
+
+        # Multi-doc: analyze remaining documents
+        if is_multi:
+            doc_results = [{
+                "name": primary_pdf.name,
+                "clause_df": clause_df,
+                "spans": spans,
+                "summary": contract_summary,
+            }]
+            for i, pdf_file in enumerate(uploaded_pdfs[1:], 2):
+                progress_bar.progress(0, text=f"Analyzing document {i}/{len(uploaded_pdfs)}: {pdf_file.name}…")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                    tmp.write(pdf_file.read())
+                    extra_path = tmp.name
+                extra_df, extra_spans, _, _ = analyze_document(extra_path)
+                extra_df["_known"] = extra_df["final_clause"] != "Unknown"
+                extra_df = extra_df.sort_values(by=["_known","span_id"], ascending=[False,True]).drop(columns="_known").reset_index(drop=True)
+                extra_summary = build_contract_summary(extra_df, extra_spans)
+                doc_results.append({
+                    "name": pdf_file.name,
+                    "clause_df": extra_df,
+                    "spans": extra_spans,
+                    "summary": extra_summary,
+                })
+            st.session_state.multi_doc_results = aggregate_documents(doc_results)
+            st.session_state.multi_doc_raw = doc_results
+
         st.query_params["tab"] = "overview"
         progress_bar.empty()
         st.rerun()
-
-# ── Main UI ────────────────────────────────────────────────────────────────────
 if st.session_state.analyzed:
     clause_df = st.session_state.clause_df
     spans = st.session_state.spans
     summary = st.session_state.contract_summary
 
-    _TAB_IDX = {"overview":0,"deviations":1,"risk":2,"analytics":3,"summary":4,"ask":5}
+    _TAB_IDX = {"overview":0,"deviations":1,"risk":2,"analytics":3,"summary":4,"ask":5,"multidoc":6}
     _active = st.query_params.get("tab","overview")
     _idx = _TAB_IDX.get(_active, 0)
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  "])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  ","  Multi-Doc  "])
 
     if _idx > 0:
         st.components.v1.html(f"""<script>
@@ -542,6 +584,87 @@ ContractIQ augments human review — it does not replace it.
 <tr><td style="color:#94a3b8;padding:0.5rem 0.8rem">Composite deviation score</td><td style="text-align:center;color:#68d391">✓ 0.0–1.0</td><td style="text-align:center;color:#fc8181">✗</td><td style="text-align:center;color:#fc8181">✗</td></tr>
 </table>
 </div>""", unsafe_allow_html=True)
+
+
+    # ── TAB 7: MULTI-DOC ─────────────────────────────────────────────────────
+    with tab7:
+        st.markdown('<p class="section-header">Multi-Document Analysis</p>', unsafe_allow_html=True)
+
+        if not st.session_state.get("multi_doc_results"):
+            if st.session_state.analysis_mode == "multi":
+                st.info("Upload 2 or more contracts and click **Analyze Contract(s)** to compare them.")
+            else:
+                st.markdown("""<div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:10px;padding:1.2rem;color:#94a3b8;font-size:0.88rem">
+Switch to <b style="color:#63b3ed">Multi-Document</b> mode in the sidebar to upload and compare multiple contracts simultaneously.
+<br><br>Use cases: contract version comparison · master + amendments · vendor portfolio risk · counterparty benchmarking.
+</div>""", unsafe_allow_html=True)
+        else:
+            import pandas as pd
+            agg = st.session_state.multi_doc_results
+            raw = st.session_state.get("multi_doc_raw", [])
+
+            # ── Overview cards ──────────────────────────────────────────────
+            st.markdown(f'<div style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem">Comparing <b style="color:#63b3ed">{agg["n_docs"]} documents</b></div>', unsafe_allow_html=True)
+
+            cols = st.columns(len(agg["doc_overviews"]))
+            for col, ov in zip(cols, agg["doc_overviews"]):
+                dev_color = "#fc8181" if ov["deviation_rate"] > 0.3 else "#f6ad55" if ov["deviation_rate"] > 0.1 else "#68d391"
+                col.markdown(f"""<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:1rem;text-align:center">
+<div style="font-size:0.75rem;color:#64748b;margin-bottom:0.4rem;word-break:break-all">{ov["document"][:30]}</div>
+<div style="font-size:1.6rem;font-weight:700;color:{dev_color}">{ov["deviation_rate"]:.0%}</div>
+<div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Deviation Rate</div>
+<div style="font-size:0.78rem;color:#94a3b8;margin-top:0.4rem">{ov["deviating"]} / {ov["recognized"]} clauses</div>
+</div>""", unsafe_allow_html=True)
+
+            # ── Heatmap ─────────────────────────────────────────────────────
+            st.markdown('<p class="section-header" style="margin-top:1.5rem">Clause × Document Heatmap</p>', unsafe_allow_html=True)
+            st.caption("⚠️ = Deviating  ·  ✅ = Present, no deviation  ·  — = Not found in this document")
+            heatmap_df = build_heatmap_dataframe(agg)
+            st.dataframe(heatmap_df, use_container_width=True)
+
+            # ── Systemic risks ──────────────────────────────────────────────
+            if agg["systemic_risks"]:
+                st.markdown('<p class="section-header">🔴 Systemic Risks — Deviating Across All Documents</p>', unsafe_allow_html=True)
+                for sr in agg["systemic_risks"]:
+                    st.markdown(f'<div style="background:rgba(252,129,129,0.08);border-left:3px solid #fc8181;border-radius:0 8px 8px 0;padding:0.7rem 1rem;margin:0.3rem 0;color:#e2e8f0;font-size:0.88rem"><b>{sr["clause"]}</b> <span style="color:#fc8181;font-size:0.78rem">— deviating in all {len(sr["affected_docs"])} documents</span></div>', unsafe_allow_html=True)
+            else:
+                st.success("✅ No systemic risks detected across all documents.")
+
+            # ── Isolated risks ──────────────────────────────────────────────
+            if agg["isolated_risks"]:
+                st.markdown('<p class="section-header">🟡 Isolated Risks — Deviating in Only One Document</p>', unsafe_allow_html=True)
+                for ir in agg["isolated_risks"]:
+                    doc = ir["affected_docs"][0] if ir["affected_docs"] else "unknown"
+                    st.markdown(f'<div style="background:rgba(246,173,85,0.06);border-left:3px solid #f6ad55;border-radius:0 8px 8px 0;padding:0.7rem 1rem;margin:0.3rem 0;color:#e2e8f0;font-size:0.88rem"><b>{ir["clause"]}</b> <span style="color:#f6ad55;font-size:0.78rem">— only in: {doc}</span></div>', unsafe_allow_html=True)
+
+            # ── Risk ranking ────────────────────────────────────────────────
+            if agg["risk_ranking"]:
+                st.markdown('<p class="section-header">Clause Risk Ranking</p>', unsafe_allow_html=True)
+                rank_rows = [{"Clause": c, "Deviation Rate": f"{r:.0%}", "Deviating In": f"{d}/{agg['clause_deviation_rates'][c]['present_in']} docs"} for c, r, d in agg["risk_ranking"]]
+                st.dataframe(pd.DataFrame(rank_rows), use_container_width=True, hide_index=True)
+
+            # ── Top deviation reasons ───────────────────────────────────────
+            if agg["top_reasons"]:
+                st.markdown('<p class="section-header">Most Common Deviation Signals</p>', unsafe_allow_html=True)
+                for reason, count in agg["top_reasons"][:6]:
+                    pct = count / sum(c for _, c in agg["top_reasons"])
+                    st.markdown(f'<div style="display:flex;align-items:center;gap:0.8rem;margin:0.3rem 0"><span style="color:#94a3b8;font-size:0.82rem;min-width:280px">{reason}</span><div style="flex:1;background:rgba(255,255,255,0.05);border-radius:4px;height:6px"><div style="background:#63b3ed;width:{pct:.0%};height:6px;border-radius:4px"></div></div><span style="color:#63b3ed;font-size:0.78rem;min-width:30px">{count}x</span></div>', unsafe_allow_html=True)
+
+            # ── Per-document detail ─────────────────────────────────────────
+            if raw:
+                st.markdown('<p class="section-header">Per-Document Breakdown</p>', unsafe_allow_html=True)
+                for doc in raw:
+                    dev_count = int(doc["clause_df"]["final_deviation"].sum())
+                    total = len(doc["clause_df"][doc["clause_df"]["final_clause"] != "Unknown"])
+                    with st.expander(f"{doc['name']}  ·  {dev_count} deviation(s) / {total} clauses"):
+                        dev_rows = doc["clause_df"][doc["clause_df"]["final_deviation"]]
+                        if dev_rows.empty:
+                            st.success("No deviations detected.")
+                        else:
+                            for _, row in dev_rows.iterrows():
+                                sid = int(row["span_id"])
+                                sev = row.get("severity", "Medium")
+                                st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid {"#fc8181" if sev=="High" else "#f6ad55"};padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;margin:0.3rem 0;color:#94a3b8;font-size:0.82rem"><b style="color:#e2e8f0">{row["final_clause"]}</b> · {sev} · {"; ".join(row.get("deviation_reasons",[]))}</div>', unsafe_allow_html=True)
 
     st.markdown('<div style="text-align:center;padding:1.5rem;color:#475569;font-size:0.78rem"><i>ContractIQ was developed as a final year research project by Team 2022AIE01. The CSDA algorithm is an original contribution. Not legal advice.</i></div>', unsafe_allow_html=True)
 # ── Footer ─────────────────────────────────────────────────────────────────────
