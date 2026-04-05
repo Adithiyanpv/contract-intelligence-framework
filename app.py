@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,7 +20,7 @@ from summarizer.contract_summarizer import summarize_contract, evaluate_summary
 from multi_doc.aggregator import aggregate_documents, build_heatmap_dataframe
 
 # ── Session state ──────────────────────────────────────────────────────────────
-for k, v in [("analyzed", False), ("last_answer", None), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
+for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -229,14 +229,14 @@ if analyze_clicked:
             st.session_state.multi_doc_results = aggregate_documents(doc_results)
             st.session_state.multi_doc_raw = doc_results
 
-        st.query_params["tab"] = "overview"
+        st.session_state["_active_tab"] = "overview"
         progress_bar.empty()
         st.rerun()
 if st.session_state.analyzed:
     clause_df = st.session_state.clause_df
     spans = st.session_state.spans
     summary = st.session_state.contract_summary
-    _active = st.query_params.get("tab", "overview")
+    _active = st.session_state.get("_active_tab", st.query_params.get("tab", "overview"))
     _has_multidoc = bool(st.session_state.get("multi_doc_results"))
     _tab_labels = ["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  "]
     if _has_multidoc: _tab_labels.append("  Multi-Doc  ")
@@ -391,7 +391,7 @@ setTimeout(clickTab,300);
                 doc_summary = summarize_contract(spans, clause_df, st.session_state.embedder, summary)
                 metrics = evaluate_summary(doc_summary, spans)
                 st.session_state.contract_doc_summary = {"summary": doc_summary, "metrics": metrics}
-                st.query_params["tab"] = "summary"
+                st.session_state["_active_tab"] = "summary"
 
         if "contract_doc_summary" in st.session_state and st.session_state.contract_doc_summary and "overall_summary" in st.session_state.contract_doc_summary.get("summary", {}):
             ds = st.session_state.contract_doc_summary["summary"]
@@ -490,7 +490,7 @@ Powered by <b>{"Groq · llama-3.1-8b-instant" if llm_source=="groq" else "Ollama
             if not question.strip():
                 st.warning("Please enter a question.")
             else:
-                st.query_params["tab"] = "ask"
+                st.session_state["_active_tab"] = "ask"
                 with st.spinner("Analyzing..."):
                     retrieval = ask_document(question, clause_df, spans,
                                              st.session_state.embeddings, st.session_state.embedder)
