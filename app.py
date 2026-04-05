@@ -1,9 +1,8 @@
 ﻿import streamlit as st
-st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
-import os, sys, requests, tempfile, json
+st.set_page_config(page_title="ContractIQ", page_icon="⚖️", layout="wide")
+import os, sys, requests, tempfile
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
-if _APP_DIR not in sys.path:
-    sys.path.insert(0, _APP_DIR)
+if _APP_DIR not in sys.path: sys.path.insert(0, _APP_DIR)
 os.chdir(_APP_DIR)
 if not os.path.exists(os.path.join(_APP_DIR, "resources", "deberta-clause-final")):
     with st.spinner("Downloading model artifacts (first run only)..."):
@@ -17,16 +16,17 @@ from llm.llm_client import get_llm_client, build_safe_prompt
 from pipeline import (analyze_document, ask_document, build_contract_summary,
                       narrate_contract_summary, export_results_csv, export_results_json)
 from summarizer.contract_summarizer import summarize_contract, evaluate_summary
-from summarizer.contract_summarizer import summarize_contract, evaluate_summary
 from summarizer.hrs_engine import hierarchical_summarize, CLAUSE_CATEGORIES
-
 from rag.contract_rag import crag_answer
-# ── Session state ──────────────────────────────────────────────────────────────
 from negotiation.simulator import simulate_negotiation, STANCES
 from obligation_graph.extractor import extract_obligations, build_obligation_graph
-for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None), ("_force_ask_tab", False), ("neg_results", None), ("neg_clause", None), ("ob_graph", None), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
-    if k not in st.session_state:
-        st.session_state[k] = v
+
+# ── Session state ──────────────────────────────────────────────────────────────
+for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None),
+             ("_force_ask_tab", False), ("neg_results", None), ("neg_clause", None),
+             ("ob_graph", None), ("contract_doc_summary", None),
+             ("multi_doc_results", None), ("analysis_mode", "single")]:
+    if k not in st.session_state: st.session_state[k] = v
 
 llm, llm_source = get_llm_client()
 
