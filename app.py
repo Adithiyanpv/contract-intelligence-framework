@@ -368,7 +368,7 @@ setTimeout(clickTab,300);
             st.caption(f"Summary: {mt['summary_sentences']} sentences · Coverage: {mt['coverage']:.1%} · Compression: {mt['compression_ratio']:.1%}")
 
     # ── TAB 4: ASK THE CONTRACT ───────────────────────────────────────────────
-    with tab4:
+    with tab5:
         st.markdown('<p class="section-header">Ask a Question</p>', unsafe_allow_html=True)
 
         if llm_source in ("groq","ollama"):
