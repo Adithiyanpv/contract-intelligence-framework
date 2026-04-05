@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -237,6 +237,27 @@ if analyze_clicked:
 if st.session_state.analyzed:
     clause_df = st.session_state.clause_df
     spans = st.session_state.spans
+
+    # ── Document selector for multi-doc mode ──────────────────────────────
+    _raw_docs = st.session_state.get("multi_doc_raw", [])
+    if _raw_docs and len(_raw_docs) > 1:
+        _doc_names = [d["name"] for d in _raw_docs]
+        _selected_doc = st.selectbox("📄 Viewing document:", _doc_names, key="doc_selector")
+        _sel_idx = _doc_names.index(_selected_doc)
+        _sel = _raw_docs[_sel_idx]
+        clause_df = _sel["clause_df"]
+        spans = _sel["spans"]
+        summary = _sel["summary"]
+        # Rebuild narration for selected doc
+        if _sel_idx == 0:
+            _narration = st.session_state.summary_narration
+        else:
+            _narration = (f"Viewing: {_selected_doc}. " +
+                f"{summary['overview']['deviating_spans']} deviating clause(s) detected " +
+                f"out of {summary['overview']['recognized_clauses']} recognized.")
+    else:
+        _narration = st.session_state.summary_narration
+
     summary = st.session_state.contract_summary
     _active = st.session_state.get("_active_tab", st.query_params.get("tab", "overview"))
     _has_multidoc = bool(st.session_state.get("multi_doc_results"))
@@ -260,7 +281,7 @@ setTimeout(clickTab,300);
     # ── TAB 1: OVERVIEW ──────────────────────────────────────────────────────
     with tab1:
         st.markdown('<p class="section-header">Executive Summary</p>', unsafe_allow_html=True)
-        st.markdown(f'<div class="answer-box"><p style="color:#cbd5e1;line-height:1.7">{st.session_state.summary_narration}</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="answer-box"><p style="color:#cbd5e1;line-height:1.7">{_narration}</p></div>', unsafe_allow_html=True)
 
         c1,c2,c3,c4 = st.columns(4)
         for col, val, lbl in [
