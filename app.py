@@ -13,7 +13,7 @@ if not os.path.exists(os.path.join(_APP_DIR, "resources", "deberta-clause-final"
         except Exception as e:
             st.error(f"Model download failed: {e}")
             st.stop()
-from llm.llm_client import get_llm_client, build_safe_prompt
+from llm.llm_client import get_llm_client
 from pipeline import (analyze_document, ask_document, build_contract_summary,
                       narrate_contract_summary, export_results_csv, export_results_json)
 
@@ -418,3 +418,4 @@ st.markdown("""
   </p>
 </div>
 """, unsafe_allow_html=True)
+
