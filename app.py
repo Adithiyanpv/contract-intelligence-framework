@@ -213,7 +213,7 @@ if analyze_clicked:
                 "spans": spans,
                 "summary": contract_summary,
             }]
-            for i, pdf_file in enumerate(uploaded_pdfs[1:], 2):
+            for i, (extra_name, extra_bytes) in enumerate(all_pdf_bytes[1:], 2):
                 progress_bar.progress(0, text=f"Analyzing document {i}/{len(all_pdf_bytes)}: {extra_name}...")
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                     tmp.write(extra_bytes)
