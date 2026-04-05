@@ -87,3 +87,5 @@ def build_safe_prompt(question, evidence_list):
         f"CLAUSE METADATA:\n{meta_str}\n\n"
         f"QUESTION: {question}\n\nANSWER:"
     )
+
+
