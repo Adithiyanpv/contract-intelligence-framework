@@ -375,8 +375,6 @@ setTimeout(clickTab,300);
             st.dataframe(pd.DataFrame(rows_t), use_container_width=True, hide_index=True)
 
 
-    # ── TAB 4: SUMMARY ──────────────────────────────────────────────────────
-    with tab5:
     with tab5:
         st.markdown('<p class="section-header">Document Summary</p>', unsafe_allow_html=True)
         st.markdown("""<div style="background:rgba(104,211,145,0.04);border:1px solid rgba(104,211,145,0.15);border-radius:8px;padding:0.7rem 1rem;font-size:0.8rem;color:#68d391;margin-bottom:1rem">
