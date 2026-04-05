@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -143,16 +143,16 @@ with st.sidebar:
     else:
         st.info("🔍 CRAG deterministic mode")
         st.caption("Add GROQ_API_KEY for LLM generation")
-    mode = st.radio("", ["Single Document", "Multi-Document"], label_visibility="collapsed", horizontal=True)
+    mode = st.radio("Mode", ["Single Document", "Multi-Document"], label_visibility="collapsed", horizontal=True)
     st.session_state.analysis_mode = "multi" if mode == "Multi-Document" else "single"
 
     st.markdown('<p class="section-header">Upload Contract(s)</p>', unsafe_allow_html=True)
     if st.session_state.analysis_mode == "single":
-        uploaded_pdfs = st.file_uploader("", type=["pdf"], label_visibility="collapsed", accept_multiple_files=False)
+        uploaded_pdfs = st.file_uploader("Upload PDF", type=["pdf"], label_visibility="collapsed", accept_multiple_files=False)
         uploaded_pdfs = [uploaded_pdfs] if uploaded_pdfs else []
     else:
         st.caption("Upload 2–5 contracts to compare")
-        uploaded_pdfs = st.file_uploader("", type=["pdf"], label_visibility="collapsed", accept_multiple_files=True)
+        uploaded_pdfs = st.file_uploader("Upload PDFs", type=["pdf"], label_visibility="collapsed", accept_multiple_files=True)
 
     analyze_clicked = st.button("▶  Analyze Contract(s)", use_container_width=True)
 
@@ -531,7 +531,7 @@ Powered by <b>{"Groq · llama-3.1-8b-instant" if llm_source=="groq" else "Ollama
 🔍 <b>CRAG deterministic mode</b> — answers derived from verified contract evidence without LLM. Add GROQ_API_KEY for natural language generation.
 </div>""", unsafe_allow_html=True)
 
-        question = st.text_input("", placeholder="e.g. What are the risks? What does the liability clause say? Who are the parties?", label_visibility="collapsed")
+        question = st.text_input("Question", placeholder="e.g. What are the risks? What does the liability clause say? Who are the parties?", label_visibility="collapsed")
 
         if st.button("Ask ContractIQ", use_container_width=False):
             if not question.strip():

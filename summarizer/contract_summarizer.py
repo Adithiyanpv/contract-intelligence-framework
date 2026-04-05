@@ -271,3 +271,4 @@ def evaluate_summary(summary_dict, reference_spans):
         "summary_clauses": len(summary_dict.get("clause_summaries", {})),
         "reference_spans": len(reference_spans),
     }
+# v2
