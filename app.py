@@ -13,12 +13,13 @@ if not os.path.exists(os.path.join(_APP_DIR, "resources", "deberta-clause-final"
         except Exception as e:
             st.error(f"Model download failed: {e}")
             st.stop()
-from llm.llm_client import get_llm_client
+from llm.llm_client import get_llm_client, build_safe_prompt
 from pipeline import (analyze_document, ask_document, build_contract_summary,
+from summarizer.contract_summarizer import summarize_contract, evaluate_summary
                       narrate_contract_summary, export_results_csv, export_results_json)
 
 # ── Session state ──────────────────────────────────────────────────────────────
-for k, v in [("analyzed", False), ("last_answer", None)]:
+for k, v in [("analyzed", False), ("last_answer", None), ("contract_doc_summary", None)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -193,11 +194,11 @@ if st.session_state.analyzed:
     spans = st.session_state.spans
     summary = st.session_state.contract_summary
 
-    _TAB_IDX = {"overview":0,"deviations":1,"analytics":2,"ask":3}
+    _TAB_IDX = {"overview":0,"deviations":1,"analytics":2,"summary":3,"ask":4}
     _active = st.query_params.get("tab","overview")
     _idx = _TAB_IDX.get(_active, 0)
 
-    tab1, tab2, tab3, tab4 = st.tabs(["  Overview  ","  Deviating Clauses  ","  Analytics  ","  Ask the Contract  "])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["  Overview  ","  Deviating Clauses  ","  Analytics  ","  Summary  ","  Ask the Contract  "])
 
     if _idx > 0:
         st.components.v1.html(f"""<script>
@@ -324,6 +325,47 @@ setTimeout(clickTab,300);
                            "Max Dev Score":f"{s['deviation_score'].max():.2f}" if "deviation_score" in s else "—"})
         if rows_t:
             st.dataframe(pd.DataFrame(rows_t), use_container_width=True, hide_index=True)
+
+
+    # ── TAB 4: SUMMARY ──────────────────────────────────────────────────────
+    with tab4:
+        st.markdown('<p class="section-header">Document Summary</p>', unsafe_allow_html=True)
+        st.markdown('<div class="privacy-notice">🔒 Fully local extraction — no document content sent externally.</div>', unsafe_allow_html=True)
+        if st.button("Generate Summary", use_container_width=False):
+            with st.spinner("Extracting structured summary..."):
+                doc_summary = summarize_contract(spans, clause_df, st.session_state.embedder, summary)
+                metrics = evaluate_summary(doc_summary["extractive_summary"], spans)
+                st.session_state.contract_doc_summary = {"summary": doc_summary, "metrics": metrics}
+                st.query_params["tab"] = "summary"
+        if "contract_doc_summary" in st.session_state and st.session_state.contract_doc_summary:
+            ds = st.session_state.contract_doc_summary["summary"]
+            mt = st.session_state.contract_doc_summary["metrics"]
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown('<p class="section-header">Parties Involved</p>', unsafe_allow_html=True)
+                for p in (ds["parties"] or ["Not detected"]): st.markdown(f'<span style="background:rgba(99,179,237,0.1);color:#63b3ed;padding:3px 10px;border-radius:20px;font-size:0.82rem;display:inline-block;margin:2px">{p}</span>', unsafe_allow_html=True)
+                st.markdown('<p class="section-header">Key Dates</p>', unsafe_allow_html=True)
+                if ds["effective_date"]: st.markdown(f"📅 **Effective:** {ds['effective_date']}")
+                if ds["expiry_date"] and ds["expiry_date"] != ds["effective_date"]: st.markdown(f"📅 **Expiry:** {ds['expiry_date']}")
+                st.markdown('<p class="section-header">Governing Law</p>', unsafe_allow_html=True)
+                st.write(ds["governing_law"] or "Not explicitly stated")
+                st.markdown('<p class="section-header">Defined Terms</p>', unsafe_allow_html=True)
+                terms_html = " ".join(f'<span style="background:rgba(255,255,255,0.05);color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:0.78rem;margin:2px;display:inline-block">{t}</span>' for t in (ds["key_terms"] or ["None"]))
+                st.markdown(terms_html, unsafe_allow_html=True)
+            with c2:
+                st.markdown('<p class="section-header">Key Obligations</p>', unsafe_allow_html=True)
+                for ob in (ds["obligations"] or ["None detected"]): st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid #63b3ed;padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;color:#94a3b8;font-size:0.82rem;margin:0.3rem 0">{ob}</div>', unsafe_allow_html=True)
+                st.markdown('<p class="section-header">Payment Terms</p>', unsafe_allow_html=True)
+                for pt in (ds["payment_terms"] or ["None detected"]): st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid #f6ad55;padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;color:#94a3b8;font-size:0.82rem;margin:0.3rem 0">{pt}</div>', unsafe_allow_html=True)
+            st.markdown('<p class="section-header">Extractive Summary</p>', unsafe_allow_html=True)
+            for i_s, sent in enumerate(ds["extractive_summary"], 1): st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.7rem 1rem;color:#cbd5e1;font-size:0.87rem;line-height:1.6;margin:0.4rem 0"><span style="color:#475569;font-size:0.75rem">#{i_s}</span> {sent}</div>', unsafe_allow_html=True)
+            st.markdown('<p class="section-header">Summary Quality Metrics</p>', unsafe_allow_html=True)
+            mc1,mc2,mc3,mc4 = st.columns(4)
+            mc1.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["rouge_1"]["f1"]:.3f}</div><div class="lbl">ROUGE-1 F1</div></div>', unsafe_allow_html=True)
+            mc2.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["rouge_2"]["f1"]:.3f}</div><div class="lbl">ROUGE-2 F1</div></div>', unsafe_allow_html=True)
+            mc3.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["coverage"]:.3f}</div><div class="lbl">Coverage</div></div>', unsafe_allow_html=True)
+            mc4.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["compression_ratio"]:.3f}</div><div class="lbl">Compression</div></div>', unsafe_allow_html=True)
+            st.caption(f"Summary: {mt['summary_sentences']} sentences · Coverage: {mt['coverage']:.1%} · Compression: {mt['compression_ratio']:.1%}")
 
     # ── TAB 4: ASK THE CONTRACT ───────────────────────────────────────────────
     with tab4:
