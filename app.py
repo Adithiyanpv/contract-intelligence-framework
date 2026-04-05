@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +22,8 @@ from summarizer.hrs_engine import hierarchical_summarize, CLAUSE_CATEGORIES
 
 from rag.contract_rag import crag_answer
 # ── Session state ──────────────────────────────────────────────────────────────
-for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None), ("_force_ask_tab", False), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
+from negotiation.simulator import simulate_negotiation, STANCES
+for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None), ("_force_ask_tab", False), ("neg_results", None), ("neg_clause", None), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -262,17 +263,17 @@ if st.session_state.analyzed:
     summary = st.session_state.contract_summary
     _active = st.session_state.get("_active_tab", st.query_params.get("tab", "overview"))
     _has_multidoc = bool(st.session_state.get("multi_doc_results"))
-    _tab_labels = ["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  "]
+    _tab_labels = ["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  ","  Negotiate  "]
     if _has_multidoc: _tab_labels.append("  Multi-Doc  ")
-    _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask"] + (["multidoc"] if _has_multidoc else []))}
+    _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask","negotiate"] + (["multidoc"] if _has_multidoc else []))}
     _idx = _TAB_IDX.get(_active, 0)
     # If answer was just generated, force Ask tab regardless of _active_tab
     if st.session_state.get('_force_ask_tab'):
         _idx = _TAB_IDX.get('ask', 5)
         st.session_state['_force_ask_tab'] = False
     _tabs = st.tabs(_tab_labels)
-    tab1,tab2,tab3,tab4,tab5,tab6 = _tabs[:6]
-    tab7 = _tabs[6] if _has_multidoc else None
+    tab1,tab2,tab3,tab4,tab5,tab6,tab7 = _tabs[:7]
+    tab8 = _tabs[7] if _has_multidoc else None
 
     if _idx > 0:
         st.components.v1.html(f"""<script>
@@ -589,10 +590,82 @@ Powered by <b>{"Groq · llama-3.1-8b-instant" if llm_source=="groq" else "Ollama
             for note in ans.get("confidence_notes", []):
                 st.caption(note)
 
+
+    # ── TAB 7: NEGOTIATE ─────────────────────────────────────────────────────
+    with tab7:
+        st.markdown('<p class="section-header">Clause Negotiation Simulator</p>', unsafe_allow_html=True)
+        st.markdown("""<div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.2);border-radius:8px;padding:0.8rem 1rem;font-size:0.82rem;color:#94a3b8;margin-bottom:1rem">
+⚖️ <b style="color:#e2e8f0">Novel feature</b> — Select a deviating clause and generate alternative phrasings at three negotiation stances.
+Each alternative is scored for how much it moves the clause toward standard language (similarity improvement).
+<b style="color:#68d391">This feature does not exist in any commercial contract analysis tool.</b>
+</div>""", unsafe_allow_html=True)
+
+        deviating = clause_df[clause_df["final_deviation"]]
+        if deviating.empty:
+            st.success("No deviating clauses to negotiate — this contract has no flagged deviations.")
+        else:
+            # Clause selector
+            dev_options = []
+            for _, row in deviating.iterrows():
+                sid = int(row["span_id"])
+                sev = row.get("severity", "Medium")
+                score = row.get("deviation_score", 0.0)
+                dev_options.append(f"{row['final_clause']} | Span {sid} | {sev} | score {score:.2f}")
+
+            selected = st.selectbox("Select a deviating clause to negotiate:", dev_options, key="neg_selector")
+            sel_idx = dev_options.index(selected)
+            sel_row = deviating.iloc[sel_idx]
+            sel_sid = int(sel_row["span_id"])
+            sel_clause = sel_row["final_clause"]
+            sel_reasons = sel_row.get("deviation_reasons", [])
+            sel_score = float(sel_row.get("deviation_score", 0.0))
+            sel_text = spans[sel_sid]
+
+            # Show original clause
+            st.markdown('<p class="section-header">Original Clause</p>', unsafe_allow_html=True)
+            sev = sel_row.get("severity", "Medium")
+            rc = {"High":"risk-high","Medium":"risk-medium","Low":"risk-low"}.get(sev,"risk-medium")
+            st.markdown(f'<div class="risk-card {rc}">{pill(sev)} <b style="color:#e2e8f0">{sel_clause}</b> · deviation score {sel_score:.2f}<br><span style="color:#94a3b8;font-size:0.8rem">{"; ".join(sel_reasons)}</span></div>', unsafe_allow_html=True)
+            with st.expander("View original text"):
+                st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem;color:#94a3b8;font-size:0.85rem;line-height:1.6">{sel_text}</div>', unsafe_allow_html=True)
+
+            if st.button("⚖️ Generate Negotiation Alternatives", use_container_width=False, key="neg_btn"):
+                with st.spinner("Generating alternatives at 3 negotiation stances..."):
+                    from pipeline import load_baselines
+                    _centroids, _, _, _, _ = load_baselines()
+                    neg_results = simulate_negotiation(
+                        sel_clause, sel_text, sel_reasons, sel_score,
+                        st.session_state.embedder, _centroids, llm_fn=llm
+                    )
+                    st.session_state["neg_results"] = neg_results
+                    st.session_state["neg_clause"] = sel_clause
+
+            if st.session_state.get("neg_results"):
+                st.markdown('<p class="section-header">Negotiation Alternatives</p>', unsafe_allow_html=True)
+                orig_sim = st.session_state["neg_results"][0].get("original_similarity")
+                if orig_sim is not None:
+                    st.caption(f"Original clause similarity to standard '{st.session_state['neg_clause']}' language: {orig_sim:.3f}")
+
+                for res in st.session_state["neg_results"]:
+                    imp = res.get("similarity_improvement")
+                    imp_str = f" · similarity +{imp:.3f}" if imp and imp > 0 else (f" · similarity {imp:.3f}" if imp else "")
+                    with st.expander(f"{res['icon']} {res['stance']} stance{imp_str}"):
+                        st.markdown(f'<div style="color:{res["color"]};font-size:0.8rem;margin-bottom:0.5rem">{res["description"]}</div>', unsafe_allow_html=True)
+                        st.markdown("**Rewritten clause:**")
+                        st.markdown(f'<div style="background:rgba(255,255,255,0.04);border-left:3px solid {res["color"]};border-radius:0 8px 8px 0;padding:0.8rem 1rem;color:#cbd5e1;font-size:0.87rem;line-height:1.7;margin:0.5rem 0">{res["rewritten"]}</div>', unsafe_allow_html=True)
+                        if res.get("explanation"):
+                            st.markdown("**What changed:**")
+                            st.markdown(f'<div style="background:rgba(255,255,255,0.02);border-radius:6px;padding:0.6rem 0.8rem;color:#94a3b8;font-size:0.83rem;line-height:1.6">{res["explanation"]}</div>', unsafe_allow_html=True)
+                        if imp is not None:
+                            direction = "↑ closer to standard" if imp > 0 else "↓ further from standard" if imp < 0 else "→ no change"
+                            st.caption(f"Similarity to standard language: {res.get('new_similarity', 0):.3f} ({direction})")
+
+                st.caption("Note: These are AI-generated suggestions for negotiation purposes only. Not legal advice.")
+
     # ── TAB 7: MULTI-DOC ─────────────────────────────────────────────────────
     # ── TAB 7: MULTI-DOC ─────────────────────────────────────────────────────
-    if tab7 is not None:
-        with tab7:
+    if tab8 is not None:
+        with tab8:
             st.markdown('<p class="section-header">Multi-Document Analysis</p>', unsafe_allow_html=True)
             if not st.session_state.get("multi_doc_results"):
                 if st.session_state.analysis_mode == "multi":
