@@ -377,45 +377,99 @@ setTimeout(clickTab,300);
 
     # ── TAB 4: SUMMARY ──────────────────────────────────────────────────────
     with tab5:
+    with tab5:
         st.markdown('<p class="section-header">Document Summary</p>', unsafe_allow_html=True)
-        st.markdown('<div class="privacy-notice">🔒 Fully local extraction — no document content sent externally.</div>', unsafe_allow_html=True)
-        if st.button("Generate Summary", use_container_width=False):
-            with st.spinner("Extracting structured summary..."):
+        st.markdown("""<div style="background:rgba(104,211,145,0.04);border:1px solid rgba(104,211,145,0.15);border-radius:8px;padding:0.7rem 1rem;font-size:0.8rem;color:#68d391;margin-bottom:1rem">
+🔒 Fully local — uses <b>DistilBART (sshleifer/distilbart-cnn-12-6)</b> for abstractive summarization. No document content sent externally.<br>
+<span style="color:#94a3b8">Workflow: spans grouped by clause type → DistilBART generates 2-4 sentence abstract per group → regex extracts template fields → ROUGE evaluation</span>
+</div>""", unsafe_allow_html=True)
+
+        if st.button("Generate Summary", use_container_width=False, key="gen_summary"):
+            with st.spinner("Running DistilBART summarization (first run downloads ~306MB model)..."):
                 doc_summary = summarize_contract(spans, clause_df, st.session_state.embedder, summary)
-                metrics = evaluate_summary(doc_summary["extractive_summary"], spans)
+                metrics = evaluate_summary(doc_summary, spans)
                 st.session_state.contract_doc_summary = {"summary": doc_summary, "metrics": metrics}
                 st.query_params["tab"] = "summary"
+
         if "contract_doc_summary" in st.session_state and st.session_state.contract_doc_summary:
             ds = st.session_state.contract_doc_summary["summary"]
             mt = st.session_state.contract_doc_summary["metrics"]
+
+            # Overall summary
+            st.markdown('<p class="section-header">Overall Summary</p>', unsafe_allow_html=True)
+            st.markdown(f'<div class="answer-box"><p style="color:#cbd5e1;line-height:1.8">{ds["overall_summary"]}</p></div>', unsafe_allow_html=True)
+            st.caption(f"Model: {ds['model']}")
+
+            # Template fields
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown('<p class="section-header">Parties Involved</p>', unsafe_allow_html=True)
-                for p in (ds["parties"] or ["Not detected"]): st.markdown(f'<span style="background:rgba(99,179,237,0.1);color:#63b3ed;padding:3px 10px;border-radius:20px;font-size:0.82rem;display:inline-block;margin:2px">{p}</span>', unsafe_allow_html=True)
+                if ds["parties"]:
+                    for p in ds["parties"]:
+                        st.markdown(f'<span style="background:rgba(99,179,237,0.1);color:#63b3ed;padding:3px 10px;border-radius:20px;font-size:0.82rem;display:inline-block;margin:2px">{p}</span>', unsafe_allow_html=True)
+                else:
+                    st.caption("No named parties detected")
+
                 st.markdown('<p class="section-header">Key Dates</p>', unsafe_allow_html=True)
-                if ds["effective_date"]: st.markdown(f"📅 **Effective:** {ds['effective_date']}")
-                if ds["expiry_date"] and ds["expiry_date"] != ds["effective_date"]: st.markdown(f"📅 **Expiry:** {ds['expiry_date']}")
+                if ds["effective_date"]:
+                    st.markdown(f'📅 **Effective:** {ds["effective_date"]}')
+                if ds["expiry_date"] and ds["expiry_date"] != ds["effective_date"]:
+                    st.markdown(f'📅 **Expiry/End:** {ds["expiry_date"]}')
+                if not ds["effective_date"]:
+                    st.caption("No dates detected")
+
                 st.markdown('<p class="section-header">Governing Law</p>', unsafe_allow_html=True)
                 st.write(ds["governing_law"] or "Not explicitly stated")
+
                 st.markdown('<p class="section-header">Defined Terms</p>', unsafe_allow_html=True)
-                terms_html = " ".join(f'<span style="background:rgba(255,255,255,0.05);color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:0.78rem;margin:2px;display:inline-block">{t}</span>' for t in (ds["key_terms"] or ["None"]))
-                st.markdown(terms_html, unsafe_allow_html=True)
+                if ds["key_terms"]:
+                    terms_html = " ".join(f'<span style="background:rgba(255,255,255,0.05);color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:0.78rem;margin:2px;display:inline-block">{t}</span>' for t in ds["key_terms"])
+                    st.markdown(terms_html, unsafe_allow_html=True)
+                else:
+                    st.caption("No defined terms detected")
+
             with c2:
                 st.markdown('<p class="section-header">Key Obligations</p>', unsafe_allow_html=True)
-                for ob in (ds["obligations"] or ["None detected"]): st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid #63b3ed;padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;color:#94a3b8;font-size:0.82rem;margin:0.3rem 0">{ob}</div>', unsafe_allow_html=True)
+                for ob in (ds["obligations"] or ["None detected"]):
+                    st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid #63b3ed;padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;color:#94a3b8;font-size:0.82rem;margin:0.3rem 0">{ob}</div>', unsafe_allow_html=True)
+
+                st.markdown('<p class="section-header">Key Rights</p>', unsafe_allow_html=True)
+                for r in (ds["rights"] or ["None detected"]):
+                    st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid #68d391;padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;color:#94a3b8;font-size:0.82rem;margin:0.3rem 0">{r}</div>', unsafe_allow_html=True)
+
                 st.markdown('<p class="section-header">Payment Terms</p>', unsafe_allow_html=True)
-                for pt in (ds["payment_terms"] or ["None detected"]): st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid #f6ad55;padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;color:#94a3b8;font-size:0.82rem;margin:0.3rem 0">{pt}</div>', unsafe_allow_html=True)
-            st.markdown('<p class="section-header">Extractive Summary</p>', unsafe_allow_html=True)
-            for i_s, sent in enumerate(ds["extractive_summary"], 1): st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.7rem 1rem;color:#cbd5e1;font-size:0.87rem;line-height:1.6;margin:0.4rem 0"><span style="color:#475569;font-size:0.75rem">#{i_s}</span> {sent}</div>', unsafe_allow_html=True)
+                for pt in (ds["payment_terms"] or ["None detected"]):
+                    st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid #f6ad55;padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;color:#94a3b8;font-size:0.82rem;margin:0.3rem 0">{pt}</div>', unsafe_allow_html=True)
+
+            st.markdown('<p class="section-header">Termination Conditions</p>', unsafe_allow_html=True)
+            for tc in (ds["termination"] or ["None detected"]):
+                st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid #fc8181;padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;color:#94a3b8;font-size:0.82rem;margin:0.3rem 0">{tc}</div>', unsafe_allow_html=True)
+
+            # Per-clause abstractive summaries
+            if ds["clause_summaries"]:
+                st.markdown('<p class="section-header">Per-Clause Summaries (DistilBART)</p>', unsafe_allow_html=True)
+                for clause, clause_sum in ds["clause_summaries"].items():
+                    dev = any(d["clause"] == clause for d in ds["risk_flags"])
+                    icon = "⚠️ " if dev else "✅ "
+                    with st.expander(f"{icon}{clause}"):
+                        st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem 1rem;color:#cbd5e1;font-size:0.88rem;line-height:1.7">{clause_sum}</div>', unsafe_allow_html=True)
+
+            # Risk flags
+            if ds["risk_flags"]:
+                st.markdown('<p class="section-header">Risk Flags</p>', unsafe_allow_html=True)
+                for rf in ds["risk_flags"]:
+                    sev = rf.get("severity","Medium")
+                    rc = {"High":"risk-high","Medium":"risk-medium","Low":"risk-low"}.get(sev,"risk-medium")
+                    st.markdown(f'<div class="risk-card {rc}">{pill(sev)} <b style="color:#e2e8f0">{rf["clause"]}</b><br><span style="color:#94a3b8;font-size:0.8rem">{"; ".join(rf["reasons"])}</span></div>', unsafe_allow_html=True)
+
+            # Metrics
             st.markdown('<p class="section-header">Summary Quality Metrics</p>', unsafe_allow_html=True)
-            mc1,mc2,mc3,mc4 = st.columns(4)
+            mc1, mc2, mc3, mc4 = st.columns(4)
             mc1.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["rouge_1"]["f1"]:.3f}</div><div class="lbl">ROUGE-1 F1</div></div>', unsafe_allow_html=True)
             mc2.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["rouge_2"]["f1"]:.3f}</div><div class="lbl">ROUGE-2 F1</div></div>', unsafe_allow_html=True)
             mc3.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["coverage"]:.3f}</div><div class="lbl">Coverage</div></div>', unsafe_allow_html=True)
             mc4.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["compression_ratio"]:.3f}</div><div class="lbl">Compression</div></div>', unsafe_allow_html=True)
-            st.caption(f"Summary: {mt['summary_sentences']} sentences · Coverage: {mt['coverage']:.1%} · Compression: {mt['compression_ratio']:.1%}")
-
-    # ── TAB 4: ASK THE CONTRACT ───────────────────────────────────────────────
+            st.caption(f"Summarized {mt['summary_clauses']} clause groups from {mt['reference_spans']} total spans · ROUGE measures n-gram overlap with original text")
     with tab6:
         st.markdown('<p class="section-header">Ask a Question</p>', unsafe_allow_html=True)
 

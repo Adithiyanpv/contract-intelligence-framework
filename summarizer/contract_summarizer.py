@@ -1,11 +1,21 @@
 """
 Contract Summarizer Module
 ==========================
-Uses extractive summarization (no fine-tuning needed) via:
-  - KeyBERT for keyword/keyphrase extraction
-  - sentence-transformers for semantic sentence ranking
-  - Template-based structured output (dates, parties, terms, obligations)
-  - ROUGE + BLEU evaluation metrics
+Uses abstractive summarization via DistilBART (sshleifer/distilbart-cnn-12-6)
+to generate per-clause-group summaries, combined with regex-based template
+field extraction for structured output.
+
+Model: sshleifer/distilbart-cnn-12-6
+  - 306MB distilled BART model pre-trained on CNN/DailyMail
+  - No fine-tuning required — generalizes well to legal text
+  - Runs on CPU in ~2-4s per clause group
+
+Workflow:
+  1. Group spans by detected clause type
+  2. Concatenate spans per group (truncated to 900 tokens)
+  3. DistilBART generates a 2-4 sentence abstractive summary per group
+  4. Regex extracts template fields (parties, dates, governing law, etc.)
+  5. ROUGE-1/2 + coverage metrics evaluate summary quality
 
 PRIVACY: Raw document text never leaves this module.
          Only structured summary metadata is passed to any LLM.
@@ -13,63 +23,106 @@ PRIVACY: Raw document text never leaves this module.
 
 import re
 import numpy as np
+import streamlit as st
 from collections import defaultdict
-from sklearn.metrics.pairwise import cosine_similarity
 
-
-# ── Template fields ────────────────────────────────────────────────────────────
-SUMMARY_TEMPLATE = {
-    "parties":        [],   # organisations / parties involved
-    "effective_date": None, # contract start date
-    "expiry_date":    None, # contract end / expiry date
-    "key_terms":      [],   # important defined terms
-    "obligations":    [],   # key obligations (shall / must)
-    "rights":         [],   # key rights (may / entitled)
-    "payment_terms":  [],   # financial terms
-    "termination":    [],   # termination conditions
-    "governing_law":  None, # jurisdiction
-    "key_clauses":    [],   # top clause types detected
-    "risk_flags":     [],   # deviating clauses summary
-    "extractive_summary": [],  # top-ranked sentences
-}
 
 # ── Regex patterns ─────────────────────────────────────────────────────────────
 DATE_PATTERN = re.compile(
-    r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)'
-    r'\s+\d{1,2},?\s+\d{4}\b'
+    r'\b(?:January|February|March|April|May|June|July|August|September|'
+    r'October|November|December)\s+\d{1,2},?\s+\d{4}\b'
     r'|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b'
     r'|\b\d{4}[\/\-]\d{2}[\/\-]\d{2}\b',
     re.IGNORECASE
 )
 
 PARTY_PATTERN = re.compile(
-    r'\b(?:(?:[A-Z][a-z]+\s+){1,4}(?:Inc|LLC|Ltd|Corp|Co|Company|Group|Holdings|Technologies|Solutions|Services|Pvt|Limited)\.?)\b'
-    r'|(?:"([A-Z][a-zA-Z\s]+)")',
+    r'\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}\s+'
+    r'(?:Inc|LLC|Ltd|Corp|Co|Company|Group|Holdings|Technologies|Solutions|'
+    r'Services|Pvt|Limited|Bank|Trust|Partners|Associates)\.?)\b'
+    r'|(?:between\s+)([A-Z][a-zA-Z\s,\.]{3,60})(?:\s+and\s+)([A-Z][a-zA-Z\s,\.]{3,60})(?:\s*\()',
+    re.IGNORECASE
 )
 
 OBLIGATION_PATTERN = re.compile(
-    r'[^.]*\b(?:shall|must|is required to|agrees to|will|undertakes to)\b[^.]{10,150}\.', re.IGNORECASE
+    r'[^.!?]*\b(?:shall|must|is required to|agrees to|undertakes to)\b[^.!?]{15,200}[.!?]',
+    re.IGNORECASE
 )
 
 RIGHTS_PATTERN = re.compile(
-    r'[^.]*\b(?:may|is entitled to|has the right to|reserves the right|at its discretion)\b[^.]{10,150}\.', re.IGNORECASE
+    r'[^.!?]*\b(?:may|is entitled to|has the right to|reserves the right)\b[^.!?]{15,200}[.!?]',
+    re.IGNORECASE
 )
 
 PAYMENT_PATTERN = re.compile(
-    r'[^.]*\b(?:payment|fee|fees|compensation|royalt|revenue|invoice|pay|amount|price|cost)\b[^.]{5,150}\.', re.IGNORECASE
+    r'[^.!?]*\b(?:payment|fee|fees|compensation|royalt|revenue|invoice|'
+    r'pay\b|amount|price|cost)\b[^.!?]{10,200}[.!?]',
+    re.IGNORECASE
 )
 
 TERMINATION_PATTERN = re.compile(
-    r'[^.]*\b(?:terminat|cancel|expir|end of term|notice period|upon termination)\b[^.]{5,150}\.', re.IGNORECASE
+    r'[^.!?]*\b(?:terminat|cancel|expir|end of term|notice period|'
+    r'upon termination)\b[^.!?]{10,200}[.!?]',
+    re.IGNORECASE
 )
 
 GOVERNING_LAW_PATTERN = re.compile(
-    r'[^.]*\b(?:governed by|governing law|jurisdiction|laws of|courts of)\b[^.]{5,100}\.', re.IGNORECASE
+    r'[^.!?]*\b(?:governed by|governing law|jurisdiction|laws of|courts of)\b[^.!?]{5,150}[.!?]',
+    re.IGNORECASE
 )
 
 DEFINED_TERM_PATTERN = re.compile(r'"([A-Z][a-zA-Z\s]{2,40})"')
 
 
+# ── DistilBART loader ──────────────────────────────────────────────────────────
+@st.cache_resource(show_spinner=False)
+def load_summarizer():
+    """
+    Load DistilBART summarization pipeline.
+    Model: sshleifer/distilbart-cnn-12-6
+    - 306MB distilled BART, pre-trained on CNN/DailyMail
+    - Abstractive: generates new sentences, not just extracts
+    - No fine-tuning needed for legal text summarization
+    """
+    try:
+        from transformers import pipeline as hf_pipeline
+        summarizer = hf_pipeline(
+            "summarization",
+            model="sshleifer/distilbart-cnn-12-6",
+            device=-1,  # CPU
+            truncation=True,
+        )
+        return summarizer
+    except Exception as e:
+        return None
+
+
+def _abstractive_summarize(text, summarizer, max_input=900, min_len=40, max_len=120):
+    """
+    Run DistilBART on a text chunk.
+    Truncates input to max_input chars to stay within model token limits.
+    Returns a 2-4 sentence abstractive summary.
+    """
+    if summarizer is None or not text.strip():
+        return None
+
+    # Truncate to avoid exceeding 1024 token limit
+    truncated = text[:max_input]
+
+    try:
+        result = summarizer(
+            truncated,
+            min_length=min_len,
+            max_length=max_len,
+            do_sample=False,
+            truncation=True,
+        )
+        return result[0]["summary_text"].strip()
+    except Exception:
+        return None
+
+
+# ── Template field extractors ──────────────────────────────────────────────────
 def _clean(text):
     return re.sub(r'\s+', ' ', text).strip()
 
@@ -86,41 +139,14 @@ def _deduplicate(items, max_items=5):
     return result
 
 
-# ── Extractive sentence ranking ────────────────────────────────────────────────
-def _rank_sentences(spans, embedder, top_k=8):
-    """
-    Rank spans by centrality (similarity to document centroid).
-    Returns top_k most representative spans.
-    """
-    if not spans or embedder is None:
-        return spans[:top_k]
-
-    norm_spans = [s[:512] for s in spans]  # truncate for embedding
-    embeddings = embedder.encode(norm_spans, batch_size=16, show_progress_bar=False)
-    centroid = embeddings.mean(axis=0, keepdims=True)
-    scores = cosine_similarity(embeddings, centroid).flatten()
-
-    # Boost spans that contain key signals
-    boost_terms = ["shall", "must", "agree", "terminat", "payment", "licens", "confidential", "govern"]
-    for i, span in enumerate(spans):
-        sl = span.lower()
-        boost = sum(0.05 for t in boost_terms if t in sl)
-        scores[i] += boost
-
-    top_idx = np.argsort(scores)[::-1][:top_k]
-    top_idx_sorted = sorted(top_idx)  # preserve document order
-    return [_clean(spans[i]) for i in top_idx_sorted]
-
-
-# ── Field extractors ───────────────────────────────────────────────────────────
 def _extract_parties(full_text):
     matches = PARTY_PATTERN.findall(full_text)
     parties = []
     for m in matches:
-        name = m if isinstance(m, str) else m
-        name = name.strip().strip('"')
-        if len(name) > 3:
-            parties.append(name)
+        if isinstance(m, tuple):
+            parties.extend([x.strip() for x in m if x.strip() and len(x.strip()) > 3])
+        elif isinstance(m, str) and len(m.strip()) > 3:
+            parties.append(m.strip())
     return _deduplicate(parties, max_items=6)
 
 
@@ -133,67 +159,99 @@ def _extract_defined_terms(full_text):
     return _deduplicate([t.strip() for t in terms if len(t) > 2], max_items=10)
 
 
-def _extract_pattern_sentences(full_text, pattern, max_items=4):
+def _extract_pattern_sentences(full_text, pattern, max_items=3):
     matches = pattern.findall(full_text)
     return _deduplicate([_clean(m) for m in matches if len(m.strip()) > 20], max_items=max_items)
 
 
 def _extract_governing_law(full_text):
     matches = GOVERNING_LAW_PATTERN.findall(full_text)
-    if matches:
-        return _clean(matches[0])
-    return None
+    return _clean(matches[0]) if matches else None
+
+
+# ── Priority clause groups for summarization ──────────────────────────────────
+PRIORITY_CLAUSES = [
+    "Cap On Liability",
+    "License Grant",
+    "Termination For Convenience",
+    "Anti-Assignment",
+    "Confidentiality",
+    "Ip Ownership Assignment",
+    "Audit Rights",
+    "Non-Compete",
+    "Exclusivity",
+    "Warranty Duration",
+    "Insurance",
+    "Governing Law",
+]
 
 
 # ── Main summarizer ────────────────────────────────────────────────────────────
 def summarize_contract(spans, clause_df, embedder, contract_summary):
     """
-    Generate a structured contract summary using extractive methods only.
+    Generate a structured contract summary using DistilBART abstractive
+    summarization per clause group + regex template field extraction.
+
     No raw text is passed to any external API.
 
     Args:
         spans: list of text spans from the document
         clause_df: DataFrame with clause classifications
-        embedder: SentenceTransformer instance
+        embedder: SentenceTransformer instance (unused here, kept for API compat)
         contract_summary: dict from build_contract_summary()
 
     Returns:
-        dict following SUMMARY_TEMPLATE
+        dict with structured summary fields
     """
     full_text = "\n\n".join(spans)
-    result = {k: (v.copy() if isinstance(v, list) else v) for k, v in SUMMARY_TEMPLATE.items()}
+    summarizer = load_summarizer()
 
-    # 1. Parties
-    result["parties"] = _extract_parties(full_text)
-
-    # 2. Dates
+    # ── Template field extraction ──────────────────────────────────────────────
+    parties = _extract_parties(full_text)
     all_dates = _extract_dates(full_text)
-    result["effective_date"] = all_dates[0] if all_dates else None
-    result["expiry_date"] = all_dates[-1] if len(all_dates) > 1 else None
+    effective_date = all_dates[0] if all_dates else None
+    expiry_date = all_dates[-1] if len(all_dates) > 1 else None
+    key_terms = _extract_defined_terms(full_text)
+    obligations = _extract_pattern_sentences(full_text, OBLIGATION_PATTERN, max_items=4)
+    rights = _extract_pattern_sentences(full_text, RIGHTS_PATTERN, max_items=3)
+    payment_terms = _extract_pattern_sentences(full_text, PAYMENT_PATTERN, max_items=3)
+    termination = _extract_pattern_sentences(full_text, TERMINATION_PATTERN, max_items=3)
+    governing_law = _extract_governing_law(full_text)
 
-    # 3. Defined terms
-    result["key_terms"] = _extract_defined_terms(full_text)
+    # ── Per-clause-group abstractive summaries ─────────────────────────────────
+    clause_summaries = {}
 
-    # 4. Obligations
-    result["obligations"] = _extract_pattern_sentences(full_text, OBLIGATION_PATTERN, max_items=5)
+    # Group spans by clause type
+    clause_groups = defaultdict(list)
+    for _, row in clause_df.iterrows():
+        clause = row["final_clause"]
+        if clause != "Unknown":
+            sid = int(row["span_id"])
+            if sid < len(spans):
+                clause_groups[clause].append(spans[sid])
 
-    # 5. Rights
-    result["rights"] = _extract_pattern_sentences(full_text, RIGHTS_PATTERN, max_items=4)
+    # Summarize priority clauses first, then others
+    ordered_clauses = [c for c in PRIORITY_CLAUSES if c in clause_groups]
+    ordered_clauses += [c for c in clause_groups if c not in PRIORITY_CLAUSES]
 
-    # 6. Payment terms
-    result["payment_terms"] = _extract_pattern_sentences(full_text, PAYMENT_PATTERN, max_items=3)
+    for clause in ordered_clauses:
+        group_text = " ".join(clause_groups[clause])
+        summary_text = _abstractive_summarize(group_text, summarizer)
+        if summary_text:
+            clause_summaries[clause] = summary_text
 
-    # 7. Termination
-    result["termination"] = _extract_pattern_sentences(full_text, TERMINATION_PATTERN, max_items=3)
+    # ── Overall document summary ───────────────────────────────────────────────
+    # Concatenate the top clause summaries for an overall abstract
+    top_summaries = [clause_summaries[c] for c in ordered_clauses[:5] if c in clause_summaries]
+    overall_text = " ".join(top_summaries)
+    overall_summary = _abstractive_summarize(overall_text, summarizer, max_input=800, min_len=60, max_len=150)
 
-    # 8. Governing law
-    result["governing_law"] = _extract_governing_law(full_text)
+    if not overall_summary and top_summaries:
+        # Fallback: join first sentences of each clause summary
+        overall_summary = " ".join(s.split(".")[0] + "." for s in top_summaries[:3])
 
-    # 9. Key clauses from ML classification
-    result["key_clauses"] = contract_summary["coverage"]["detected_clauses"]
-
-    # 10. Risk flags from deviation analysis
-    result["risk_flags"] = [
+    # ── Risk flags ────────────────────────────────────────────────────────────
+    risk_flags = [
         {
             "clause": d["clause"],
             "severity": d.get("severity", "Medium"),
@@ -202,24 +260,32 @@ def summarize_contract(spans, clause_df, embedder, contract_summary):
         for d in contract_summary["deviations"]
     ]
 
-    # 11. Extractive summary — top representative spans
-    result["extractive_summary"] = _rank_sentences(spans, embedder, top_k=6)
-
-    return result
+    return {
+        "model": "sshleifer/distilbart-cnn-12-6" if summarizer else "regex-only (model unavailable)",
+        "overall_summary": overall_summary or "Summary could not be generated.",
+        "clause_summaries": clause_summaries,
+        "parties": parties,
+        "effective_date": effective_date,
+        "expiry_date": expiry_date,
+        "key_terms": key_terms,
+        "obligations": obligations,
+        "rights": rights,
+        "payment_terms": payment_terms,
+        "termination": termination,
+        "governing_law": governing_law,
+        "key_clauses": contract_summary["coverage"]["detected_clauses"],
+        "risk_flags": risk_flags,
+    }
 
 
 # ── Evaluation metrics ─────────────────────────────────────────────────────────
-def evaluate_summary(summary_sentences, reference_sentences):
+def evaluate_summary(summary_dict, reference_spans):
     """
-    Evaluate summary quality using:
-    - ROUGE-1 (unigram recall/precision/F1)
-    - ROUGE-2 (bigram recall/precision/F1)
-    - Coverage score (fraction of key terms retained)
-    - Compression ratio
+    Evaluate summary quality using ROUGE-1, ROUGE-2, coverage, compression.
 
     Args:
-        summary_sentences: list of extracted summary sentences
-        reference_sentences: list of all document sentences (reference)
+        summary_dict: output of summarize_contract()
+        reference_spans: list of all document spans (reference)
 
     Returns:
         dict of metric scores
@@ -241,31 +307,29 @@ def evaluate_summary(summary_sentences, reference_sentences):
         f1 = 2 * precision * recall / max(precision + recall, 1e-9)
         return {"precision": round(precision, 4), "recall": round(recall, 4), "f1": round(f1, 4)}
 
-    hyp_text = " ".join(summary_sentences)
-    ref_text = " ".join(reference_sentences)
+    # Build hypothesis from all clause summaries + overall
+    hyp_parts = list(summary_dict.get("clause_summaries", {}).values())
+    if summary_dict.get("overall_summary"):
+        hyp_parts.insert(0, summary_dict["overall_summary"])
+    hyp_text = " ".join(hyp_parts)
+    ref_text = " ".join(reference_spans)
+
     hyp_tokens = tokenize(hyp_text)
     ref_tokens = tokenize(ref_text)
 
     r1 = rouge_n(hyp_tokens, ref_tokens, 1)
     r2 = rouge_n(hyp_tokens, ref_tokens, 2)
 
-    # Coverage: fraction of reference unigrams present in summary
     ref_vocab = set(ref_tokens)
     hyp_vocab = set(hyp_tokens)
     coverage = len(hyp_vocab & ref_vocab) / max(len(ref_vocab), 1)
-
-    # Compression ratio
     compression = len(hyp_tokens) / max(len(ref_tokens), 1)
-
-    # Density: average length of extractive fragments
-    density = len(hyp_tokens) / max(len(summary_sentences), 1)
 
     return {
         "rouge_1": r1,
         "rouge_2": r2,
         "coverage": round(coverage, 4),
         "compression_ratio": round(compression, 4),
-        "avg_sentence_length": round(density, 1),
-        "summary_sentences": len(summary_sentences),
-        "reference_sentences": len(reference_sentences),
+        "summary_clauses": len(summary_dict.get("clause_summaries", {})),
+        "reference_spans": len(reference_spans),
     }
