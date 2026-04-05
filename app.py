@@ -242,6 +242,9 @@ if st.session_state.analyzed:
     if _has_multidoc: _tab_labels.append("  Multi-Doc  ")
     _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask"] + (["multidoc"] if _has_multidoc else []))}
     _idx = _TAB_IDX.get(_active, 0)
+    _tabs = st.tabs(_tab_labels)
+    tab1,tab2,tab3,tab4,tab5,tab6 = _tabs[:6]
+    tab7 = _tabs[6] if _has_multidoc else None
 
     if _idx > 0:
         st.components.v1.html(f"""<script>
