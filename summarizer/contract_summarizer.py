@@ -210,6 +210,11 @@ def summarize_contract(spans, clause_df, embedder, contract_summary):
 
     model_desc = hrs_result["model_desc"]
 
+    risk_flags = [
+        {"clause": d["clause"], "severity": d.get("severity", "Medium"), "reasons": d["reasons"]}
+        for d in contract_summary["deviations"]
+    ]
+
     return {
         "model": model_desc,
         "overall_summary": overall_summary,
