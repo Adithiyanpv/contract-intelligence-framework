@@ -132,17 +132,16 @@ st.markdown("""
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown('<p class="section-header">LLM Status</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-header">CRAG Engine Status</p>', unsafe_allow_html=True)
     if llm_source == "groq":
-        st.success("🟢 Groq connected")
-        st.caption("llama-3.1-8b-instant · Privacy-safe mode")
+        st.success("🟢 CRAG + Groq active")
+        st.caption("Retrieval: local ML · Generation: Groq llama-3.1-8b")
     elif llm_source == "ollama":
-        st.success("🟢 Ollama connected")
-        st.caption("Local inference · No data leaves device")
+        st.success("🟢 CRAG + Ollama active")
+        st.caption("Fully local · No data leaves device")
     else:
-        st.warning("🟡 No LLM · Add GROQ_API_KEY to secrets")
-
-    st.markdown('<p class="section-header">Analysis Mode</p>', unsafe_allow_html=True)
+        st.info("🔍 CRAG deterministic mode")
+        st.caption("Add GROQ_API_KEY for LLM generation")
     mode = st.radio("", ["Single Document", "Multi-Document"], label_visibility="collapsed", horizontal=True)
     st.session_state.analysis_mode = "multi" if mode == "Multi-Document" else "single"
 
