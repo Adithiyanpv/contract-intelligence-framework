@@ -202,40 +202,19 @@ def summarize_contract(spans, clause_df, embedder, contract_summary):
         if s:
             clause_summaries[clause] = s
 
-    # Overall executive summary
-    top = [clause_summaries[c] for c in ordered_clauses[:5] if c in clause_summaries]
-    if top and llm_fn is not None:
-        combined = " ".join(top)[:800]
-        try:
-            overall_summary = llm_fn(
-                "Write a 3-4 sentence executive summary of this contract based on the "
-                "clause summaries below. Be neutral and specific. No legal advice.\n\n"
-                f"CLAUSE SUMMARIES:\n{combined}\n\nEXECUTIVE SUMMARY:"
-            ).strip()
-        except Exception:
-            overall_summary = " ".join(top[:2])
-    elif top:
-        overall_summary = " ".join(top[:2])
-    else:
-        overall_summary = "No clauses were detected with sufficient confidence to generate a summary."
+    # Overall executive summary — use HRS recursive reduction
+    from summarizer.hrs_engine import hierarchical_summarize
+    hrs_result = hierarchical_summarize(spans, clause_df, contract_summary, llm_fn)
+    overall_summary = hrs_result["executive_summary"]
+    clause_summaries = hrs_result["clause_summaries"]  # use HRS clause summaries
 
-    risk_flags = [
-        {"clause": d["clause"], "severity": d.get("severity", "Medium"), "reasons": d["reasons"]}
-        for d in contract_summary["deviations"]
-    ]
-
-    model_desc = (
-        f"Groq (llama-3.1-8b-instant) + regex extraction"
-        if llm_source == "groq"
-        else f"Ollama (local) + regex extraction"
-        if llm_source == "ollama"
-        else "Regex extraction only (no LLM connected — add GROQ_API_KEY for full summaries)"
-    )
+    model_desc = hrs_result["model_desc"]
 
     return {
         "model": model_desc,
         "overall_summary": overall_summary,
         "clause_summaries": clause_summaries,
+        "hrs_tree": hrs_result.get("hrs_tree", {}),
         "parties": parties,
         "effective_date": effective_date,
         "expiry_date": expiry_date,

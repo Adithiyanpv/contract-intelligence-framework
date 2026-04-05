@@ -17,7 +17,8 @@ from llm.llm_client import get_llm_client, build_safe_prompt
 from pipeline import (analyze_document, ask_document, build_contract_summary,
                       narrate_contract_summary, export_results_csv, export_results_json)
 from summarizer.contract_summarizer import summarize_contract, evaluate_summary
-from multi_doc.aggregator import aggregate_documents, build_heatmap_dataframe
+from summarizer.contract_summarizer import summarize_contract, evaluate_summary
+from summarizer.hrs_engine import hierarchical_summarize, CLAUSE_CATEGORIES
 
 from rag.contract_rag import crag_answer
 # ── Session state ──────────────────────────────────────────────────────────────
@@ -471,16 +472,37 @@ setTimeout(clickTab,300);
                 st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-left:2px solid #fc8181;padding:0.5rem 0.8rem;border-radius:0 6px 6px 0;color:#94a3b8;font-size:0.82rem;margin:0.3rem 0">{tc}</div>', unsafe_allow_html=True)
 
             # Per-clause abstractive summaries
-            if ds["clause_summaries"]:
-                st.markdown('<p class="section-header">Per-Clause Summaries (AI-Generated)</p>', unsafe_allow_html=True)
-                for clause, clause_sum in ds["clause_summaries"].items():
-                    dev = any(d["clause"] == clause for d in ds["risk_flags"])
-                    icon = "⚠️ " if dev else "✅ "
-                    with st.expander(f"{icon}{clause}"):
-                        st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem 1rem;color:#cbd5e1;font-size:0.88rem;line-height:1.7">{clause_sum}</div>', unsafe_allow_html=True)
+            # HRS Tree — Category → Clause hierarchy
+            if ds.get("clause_summaries"):
+                st.markdown('<p class="section-header">HRS Summary Tree — Hierarchical Recursive Summarization</p>', unsafe_allow_html=True)
+                st.caption(f"Model: {ds.get('model', 'N/A')}")
 
-            # Risk flags
-            if ds["risk_flags"]:
+                # Show category-level summaries with clause drill-down
+                hrs_tree = ds.get("hrs_tree", {})
+                level2 = hrs_tree.get("level_2_categories", {})
+
+                if level2:
+                    for cat, cat_data in level2.items():
+                        cat_sum = cat_data.get("summary", "")
+                        level1 = cat_data.get("level_1_clauses", {})
+                        has_dev = any(
+                            any(d["clause"] == c for d in ds["risk_flags"])
+                            for c in level1.keys()
+                        )
+                        icon = "⚠️ " if has_dev else "📁 "
+                        with st.expander(f"{icon}{cat}  ({len(level1)} clause{'s' if len(level1)>1 else ''})"):
+                            st.markdown(f'<div style="background:rgba(99,179,237,0.06);border-left:3px solid #63b3ed;padding:0.6rem 1rem;border-radius:0 8px 8px 0;color:#cbd5e1;font-size:0.88rem;line-height:1.7;margin-bottom:0.8rem">{cat_sum}</div>', unsafe_allow_html=True)
+                            for clause, clause_sum in level1.items():
+                                dev = any(d["clause"] == clause for d in ds["risk_flags"])
+                                c_icon = "⚠️" if dev else "✅"
+                                st.markdown(f'<div style="margin-left:1rem;margin-bottom:0.4rem"><span style="color:#64748b;font-size:0.78rem">{c_icon} {clause}</span><div style="background:rgba(255,255,255,0.02);border-radius:6px;padding:0.5rem 0.8rem;color:#94a3b8;font-size:0.82rem;line-height:1.6">{clause_sum}</div></div>', unsafe_allow_html=True)
+                else:
+                    # Flat view fallback
+                    for clause, clause_sum in ds["clause_summaries"].items():
+                        dev = any(d["clause"] == clause for d in ds["risk_flags"])
+                        icon = "⚠️ " if dev else "✅ "
+                        with st.expander(f"{icon}{clause}"):
+                            st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem 1rem;color:#cbd5e1;font-size:0.88rem;line-height:1.7">{clause_sum}</div>', unsafe_allow_html=True)
                 st.markdown('<p class="section-header">Risk Flags</p>', unsafe_allow_html=True)
                 for rf in ds["risk_flags"]:
                     sev = rf.get("severity","Medium")
