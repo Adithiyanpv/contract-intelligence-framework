@@ -155,7 +155,7 @@ with st.sidebar:
                            file_name="contractiq_analysis.json", mime="application/json", use_container_width=True)
 
     st.markdown("---")
-    st.markdown('<p style="color:#334155;font-size:0.72rem;text-align:center">ContractIQ v2.0<br>© 2026 Adithiyan PV<br>Not legal advice</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#334155;font-size:0.72rem;text-align:center">ContractIQ v2.0<br>© 2026 Team 2022AIE01<br>Not legal advice</p>', unsafe_allow_html=True)
 
 # ── Analyze ────────────────────────────────────────────────────────────────────
 if analyze_clicked:
@@ -410,7 +410,7 @@ st.markdown("""
   <p>
     <b style="color:#475569">ContractIQ</b> &nbsp;·&nbsp; AI-Powered Contract Analysis &nbsp;·&nbsp; v2.0
     <br>
-    © 2026 Adithiyan PV. All rights reserved.
+    © 2026 Team 2022AIE01. All rights reserved.
     &nbsp;·&nbsp;
     <a href="https://github.com/Adithiyanpv/contract-intelligence-framework">GitHub</a>
     &nbsp;·&nbsp;
