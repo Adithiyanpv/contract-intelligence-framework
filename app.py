@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="", layout="wide")
 import os, sys, requests, tempfile, json
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,6 +19,7 @@ from pipeline import (analyze_document, ask_document, build_contract_summary,
 from summarizer.contract_summarizer import summarize_contract, evaluate_summary
 from multi_doc.aggregator import aggregate_documents, build_heatmap_dataframe
 
+from rag.contract_rag import crag_answer
 # ── Session state ──────────────────────────────────────────────────────────────
 for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None), ("contract_doc_summary", None), ("multi_doc_results", None), ("analysis_mode", "single")]:
     if k not in st.session_state:
@@ -498,72 +499,69 @@ setTimeout(clickTab,300);
     with tab6:
         st.markdown('<p class="section-header">Ask a Question</p>', unsafe_allow_html=True)
 
-        if llm_source in ("groq","ollama"):
-            st.markdown(f"""<div class="privacy-notice">
-🔒 <b>Privacy-safe mode active</b> — raw contract text is never sent to any external API.
-The LLM receives only structured metadata (clause types, deviation flags, severity).
+        # CRAG status banner
+        if llm_source in ("groq", "ollama"):
+            st.markdown(f"""<div style="background:rgba(104,211,145,0.06);border:1px solid rgba(104,211,145,0.2);border-radius:8px;padding:0.7rem 1rem;font-size:0.8rem;color:#68d391;margin-bottom:1rem">
+🔒 <b>CRAG active</b> — Constrained Retrieval-Augmented Generation. Every answer is grounded in verified contract spans with hallucination scoring.
 Powered by <b>{"Groq · llama-3.1-8b-instant" if llm_source=="groq" else "Ollama (local)"}</b>.
 </div>""", unsafe_allow_html=True)
         else:
-            st.warning("No LLM connected. Add GROQ_API_KEY to Streamlit secrets for AI answers.")
+            st.markdown("""<div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.2);border-radius:8px;padding:0.7rem 1rem;font-size:0.8rem;color:#63b3ed;margin-bottom:1rem">
+🔍 <b>CRAG deterministic mode</b> — answers derived from verified contract evidence without LLM. Add GROQ_API_KEY for natural language generation.
+</div>""", unsafe_allow_html=True)
 
-        question = st.text_input("", placeholder="e.g. What are the risks in this contract? What does the liability clause say?", label_visibility="collapsed")
+        question = st.text_input("", placeholder="e.g. What are the risks? What does the liability clause say? Who are the parties?", label_visibility="collapsed")
 
         if st.button("Ask ContractIQ", use_container_width=False):
             if not question.strip():
                 st.warning("Please enter a question.")
             else:
                 st.session_state["_active_tab"] = "ask"
-                with st.spinner("Analyzing..."):
-                    retrieval = ask_document(question, clause_df, spans,
-                                             st.session_state.embeddings, st.session_state.embedder)
-                    evidence_list = retrieval.get("evidence", [])
-
-                    if llm is not None:
-                        # PRIVACY-SAFE: build structured metadata only — NO raw text
-                        safe_context = build_safe_prompt(question, evidence_list)
-                        try:
-                            explanation = llm(safe_context)
-                        except Exception as e:
-                            explanation = f"LLM error: {e}"
-                    else:
-                        detected = list(set(e["clause"] for e in evidence_list if e["clause"] != "Unknown"))
-                        dev_list = [e for e in evidence_list if e["deviating"]]
-                        if dev_list:
-                            explanation = (f"Found {len(dev_list)} deviating clause(s): "
-                                           f"{', '.join(set(e['clause'] for e in dev_list))}. "
-                                           f"Reasons: {'; '.join(dev_list[0]['reasons'])}. "
-                                           "Add GROQ_API_KEY for full AI explanation.")
-                        elif detected:
-                            explanation = f"Relevant clauses found: {', '.join(detected)}. No deviations detected."
-                        else:
-                            explanation = "No directly relevant clauses found for this question."
-
-                    st.session_state.last_answer = {
-                        "explanation": explanation,
-                        "evidence": evidence_list,
-                        "confidence_notes": retrieval.get("confidence_notes", [])
-                    }
+                with st.spinner("Running CRAG pipeline..."):
+                    result = crag_answer(
+                        question, clause_df, spans,
+                        st.session_state.embeddings,
+                        st.session_state.embedder,
+                        llm_fn=llm
+                    )
+                    st.session_state.last_answer = result
 
         if st.session_state.last_answer:
-            answer = st.session_state.last_answer
-            st.markdown('<p class="section-header">Answer</p>', unsafe_allow_html=True)
-            st.markdown(f'<div class="answer-box"><p style="color:#cbd5e1;line-height:1.8;white-space:pre-wrap">{answer["explanation"]}</p></div>', unsafe_allow_html=True)
+            ans = st.session_state.last_answer
 
-            if answer["evidence"]:
-                st.markdown('<p class="section-header">Supporting Clauses</p>', unsafe_allow_html=True)
-                for ev in answer["evidence"]:
+            # Grounding score banner
+            gs = ans.get("grounding_score", 0)
+            hr = ans.get("hallucination_risk", "Unknown")
+            hr_color = {"Low": "#68d391", "Medium": "#f6ad55", "High": "#fc8181"}.get(hr, "#94a3b8")
+            intent = ans.get("intent", "").replace("_", " ").title()
+            st.markdown(f"""<div style="display:flex;gap:1rem;margin-bottom:0.8rem;flex-wrap:wrap">
+<span style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;font-size:0.78rem;color:#94a3b8">Intent: <b style="color:#e2e8f0">{intent}</b></span>
+<span style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;font-size:0.78rem;color:#94a3b8">Grounding: <b style="color:#63b3ed">{gs:.2f}</b></span>
+<span style="background:rgba(255,255,255,0.04);border:1px solid {hr_color}33;border-radius:6px;padding:3px 10px;font-size:0.78rem;color:{hr_color}">Hallucination Risk: <b>{hr}</b></span>
+<span style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;font-size:0.78rem;color:#94a3b8">Evidence: <b style="color:#e2e8f0">{len(ans.get("evidence", []))} spans</b></span>
+</div>""", unsafe_allow_html=True)
+
+            if not ans.get("is_answerable", True):
+                st.warning("⚠️ Insufficient evidence to answer this question reliably from the contract.")
+
+            st.markdown('<p class="section-header">Answer</p>', unsafe_allow_html=True)
+            st.markdown(f'<div class="answer-box"><p style="color:#cbd5e1;line-height:1.8;white-space:pre-wrap">{ans["answer"]}</p></div>', unsafe_allow_html=True)
+
+            if ans.get("evidence"):
+                st.markdown('<p class="section-header">Verified Evidence (Citations)</p>', unsafe_allow_html=True)
+                for ev in ans["evidence"]:
                     sev = ev.get("severity")
-                    sev_str = f" · {sev} severity" if sev else ""
-                    with st.expander(f"{ev['clause']}  ·  Span {ev['span_id']}{sev_str}"):
-                        if ev["deviating"] and ev["reasons"]:
-                            for r in ev["reasons"]:
-                                st.markdown(f'<span style="color:#f6ad55;font-size:0.83rem">⚠ {r}</span>', unsafe_allow_html=True)
+                    sim = ev.get("similarity", 0)
+                    dev_tag = f" ⚠️ {sev}" if ev["deviating"] else ""
+                    with st.expander(f"[SPAN {ev['span_id']}] {ev['clause']}{dev_tag}  ·  relevance {sim:.0%}"):
+                        if ev["deviating"] and ev["deviation_reasons"]:
+                            for r in ev["deviation_reasons"]:
+                                st.markdown(f'<span style="color:#f6ad55;font-size:0.83rem">⚡ {r}</span>', unsafe_allow_html=True)
                         st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem;color:#94a3b8;font-size:0.85rem;line-height:1.6;margin-top:0.5rem">{ev["text"]}</div>', unsafe_allow_html=True)
 
-            for note in answer["confidence_notes"]:
+            st.markdown("---")
+            for note in ans.get("confidence_notes", []):
                 st.caption(note)
-
 
     # ── TAB 7: MULTI-DOC ─────────────────────────────────────────────────────
     # ── TAB 7: MULTI-DOC ─────────────────────────────────────────────────────
