@@ -263,37 +263,34 @@ if st.session_state.analyzed:
         _narration = st.session_state.summary_narration
 
     summary = st.session_state.contract_summary
-    _active = st.session_state.get("_active_tab", st.query_params.get("tab", "overview"))
+    _tab_names = ["overview","deviations","risk","analytics","summary","ask","negotiate"]
+    _tab_labels_display = ["Overview","Deviating Clauses","Risk Analysis","Analytics","Summary","Ask the Contract","Negotiate"]
     _has_multidoc = bool(st.session_state.get("multi_doc_results"))
-    _tab_labels = ["  Overview  ","  Deviating Clauses  ","  Risk Analysis  ","  Analytics  ","  Summary  ","  Ask the Contract  ","  Negotiate  "]
-    if _has_multidoc: _tab_labels.append("  Multi-Doc  ")
-    _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask","negotiate"] + (["multidoc"] if _has_multidoc else []))}
-    _idx = _TAB_IDX.get(_active, 0)
-    # If answer was just generated, force Ask tab regardless of _active_tab
-    if st.session_state.get('_force_tab'):
-        _idx = _TAB_IDX.get(st.session_state['_force_tab'], _idx)
-        st.session_state['_force_tab'] = None
+    if _has_multidoc:
+        _tab_names.append("multidoc")
+        _tab_labels_display.append("Multi-Doc")
 
+    # Determine active tab — _force_tab takes priority, then _active_tab
+    if st.session_state.get("_force_tab"):
+        _active = st.session_state["_force_tab"]
+        st.session_state["_active_tab"] = _active
+        st.session_state["_force_tab"] = None
+    else:
+        _active = st.session_state.get("_active_tab", "overview")
+    if _active not in _tab_names:
+        _active = "overview"
+    _idx = _tab_names.index(_active)
 
+    # Radio-based tab navigation — 100% reliable, no JS needed
+    st.markdown('<style>.stRadio>div{flex-direction:row;gap:0;background:rgba(255,255,255,0.03);border-radius:10px;padding:4px;} .stRadio>div>label{border-radius:8px;padding:6px 16px;font-size:0.85rem;font-weight:500;color:#64748b;cursor:pointer;white-space:nowrap;} .stRadio>div>label[data-checked="true"]{background:rgba(99,179,237,0.15);color:#63b3ed;}</style>', unsafe_allow_html=True)
+    _selected = st.radio("Navigation", _tab_labels_display, index=_idx, horizontal=True, label_visibility="collapsed", key="tab_nav")
+    _active = _tab_names[_tab_labels_display.index(_selected)]
+    st.session_state["_active_tab"] = _active
 
-    _tabs = st.tabs(_tab_labels)
-    tab1,tab2,tab3,tab4,tab5,tab6,tab7 = _tabs[:7]
-    tab8 = _tabs[7] if _has_multidoc else None
+    # Show content based on selected tab
+    tab1 = tab2 = tab3 = tab4 = tab5 = tab6 = tab7 = tab8 = None
 
-    if _idx > 0:
-        st.components.v1.html(f"""<script>
-var _target = {_idx};
-var _attempts = 0;
-function clickTab(){{
-    var t=window.parent.document.querySelectorAll('[data-baseweb="tab"]');
-    if(t.length>_target){{t[_target].click(); return;}}
-    if(++_attempts < 20){{setTimeout(clickTab, 100);}}
-}}
-setTimeout(clickTab, 500);
-</script>""", height=0)
-
-    # ── TAB 1: OVERVIEW ──────────────────────────────────────────────────────
-    with tab1:
+    if _active == "overview":
         st.markdown('<p class="section-header">Executive Summary</p>', unsafe_allow_html=True)
         st.markdown(f'<div class="answer-box"><p style="color:#cbd5e1;line-height:1.7">{_narration}</p></div>', unsafe_allow_html=True)
 
@@ -341,7 +338,7 @@ setTimeout(clickTab, 500);
 
         st.markdown('<p style="color:#334155;font-size:0.75rem;margin-top:1.5rem">Deviation detection uses semantic similarity, polarity analysis, and clause-specific rules. Not legal advice.</p>', unsafe_allow_html=True)
 
-    with tab2:
+    if _active == "deviations":
         deviating = clause_df[clause_df["final_deviation"]]
         if deviating.empty:
             st.success("✅ No deviating clauses detected in this contract.")
@@ -380,7 +377,7 @@ setTimeout(clickTab, 500);
                     st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem;color:#cbd5e1;font-size:0.85rem;line-height:1.6;border-left:3px solid rgba(99,179,237,0.3)">{spans[sid]}</div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
     # ── TAB 3: RISK ANALYSIS ──────────────────────────────────────────────
-    with tab3:
+    if _active == "risk":
         if summary["deviations"]:
             st.markdown('<p class="section-header">Risk Snapshot</p>', unsafe_allow_html=True)
             for d in summary["deviations"]:
@@ -389,7 +386,7 @@ setTimeout(clickTab, 500);
             st.success("✅ No non-standard clause patterns detected.")
 
 
-    with tab4:
+    if _active == "analytics":
         import pandas as pd
         st.markdown('<p class="section-header">Confidence Distribution</p>', unsafe_allow_html=True)
         known_df = clause_df[clause_df["final_clause"] != "Unknown"]
@@ -418,7 +415,7 @@ setTimeout(clickTab, 500);
             st.dataframe(pd.DataFrame(rows_t), use_container_width=True, hide_index=True)
 
 
-    with tab5:
+    if _active == "summary":
         st.markdown('<p class="section-header">Document Summary</p>', unsafe_allow_html=True)
         st.markdown("""<div style="background:rgba(104,211,145,0.04);border:1px solid rgba(104,211,145,0.15);border-radius:8px;padding:0.7rem 1rem;font-size:0.8rem;color:#68d391;margin-bottom:1rem">
 🔒 Summarization uses Groq LLM per clause group via HRS. Only individual clause text (max 700 chars) is sent per call.<br>
@@ -533,7 +530,7 @@ setTimeout(clickTab, 500);
             mc3.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["coverage"]:.3f}</div><div class="lbl">Coverage</div></div>', unsafe_allow_html=True)
             mc4.markdown(f'<div class="metric-card"><div class="val" style="font-size:1.4rem">{mt["compression_ratio"]:.3f}</div><div class="lbl">Compression</div></div>', unsafe_allow_html=True)
             st.caption(f"Summarized {mt['summary_clauses']} clause groups from {mt['reference_spans']} total spans · ROUGE measures n-gram overlap with original text")
-    with tab6:
+    if _active == "ask":
         st.markdown('<p class="section-header">Ask a Question</p>', unsafe_allow_html=True)
 
         # CRAG status banner
@@ -603,7 +600,7 @@ Powered by <b>{"Groq · llama-3.1-8b-instant" if llm_source=="groq" else "Ollama
 
 
     # ── TAB 7: NEGOTIATE ─────────────────────────────────────────────────────
-    with tab7:
+    if _active == "negotiate":
         st.markdown('<p class="section-header">Clause Negotiation Simulator</p>', unsafe_allow_html=True)
         st.markdown("""<div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.2);border-radius:8px;padding:0.8rem 1rem;font-size:0.82rem;color:#94a3b8;margin-bottom:1rem">
 Select a deviating clause and generate alternative phrasings at three negotiation stances. Each alternative is scored for how much it moves the clause toward standard language using cosine similarity against the clause centroid.
@@ -673,8 +670,8 @@ Select a deviating clause and generate alternative phrasings at three negotiatio
                 st.caption("Note: These are AI-generated suggestions for negotiation purposes only. Not legal advice.")
 
 
-    if tab8 is not None:
-        with tab8:
+    if _active == "multidoc" and _has_multidoc:
+        if True:
             st.markdown('<p class="section-header">Multi-Document Analysis</p>', unsafe_allow_html=True)
             if not st.session_state.get("multi_doc_results"):
                 if st.session_state.analysis_mode == "multi":
