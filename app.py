@@ -23,7 +23,7 @@ from negotiation.simulator import simulate_negotiation, STANCES
 
 # ── Session state ──────────────────────────────────────────────────────────────
 for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None),
-             ("_force_ask_tab", False), ("_force_neg_tab", False), ("neg_results", None), ("neg_clause", None),
+             ("_force_tab", None), ("neg_results", None), ("neg_clause", None),
              ("ob_graph", None), ("contract_doc_summary", None),
              ("multi_doc_results", None), ("analysis_mode", "single")]:
     if k not in st.session_state: st.session_state[k] = v
@@ -269,12 +269,12 @@ if st.session_state.analyzed:
     _TAB_IDX = {k:i for i,k in enumerate(["overview","deviations","risk","analytics","summary","ask","negotiate"] + (["multidoc"] if _has_multidoc else []))}
     _idx = _TAB_IDX.get(_active, 0)
     # If answer was just generated, force Ask tab regardless of _active_tab
-    if st.session_state.get('_force_ask_tab'):
-        _idx = _TAB_IDX.get('ask', 5)
-        st.session_state['_force_ask_tab'] = False
-    if st.session_state.get('_force_neg_tab'):
-        _idx = _TAB_IDX.get('negotiate', 6)
-        st.session_state['_force_neg_tab'] = False
+    if st.session_state.get('_force_tab'):
+        _idx = _TAB_IDX.get(st.session_state['_force_tab'], _idx)
+        st.session_state['_force_tab'] = None
+
+
+
     _tabs = st.tabs(_tab_labels)
     tab1,tab2,tab3,tab4,tab5,tab6,tab7 = _tabs[:7]
     tab8 = _tabs[7] if _has_multidoc else None
@@ -426,6 +426,7 @@ setTimeout(clickTab,300);
                 metrics = evaluate_summary(doc_summary, spans)
                 st.session_state.contract_doc_summary = {"summary": doc_summary, "metrics": metrics}
                 st.session_state["_active_tab"] = "summary"
+                st.session_state["_force_tab"] = "summary"
 
         if "contract_doc_summary" in st.session_state and st.session_state.contract_doc_summary and "overall_summary" in st.session_state.contract_doc_summary.get("summary", {}):
             ds = st.session_state.contract_doc_summary["summary"]
@@ -548,7 +549,7 @@ Powered by <b>{"Groq · llama-3.1-8b-instant" if llm_source=="groq" else "Ollama
                 st.warning("Please enter a question.")
             else:
                 st.session_state["_active_tab"] = "ask"
-                st.session_state["_force_ask_tab"] = True
+                st.session_state["_force_tab"] = "ask"
                 with st.spinner("Running CRAG pipeline..."):
                     result = crag_answer(
                         question, clause_df, spans,
@@ -639,7 +640,7 @@ Select a deviating clause and generate alternative phrasings at three negotiatio
                         sel_clause, sel_text, sel_reasons, sel_score,
                         st.session_state.embedder, _centroids, llm_fn=llm
                     )
-                    st.session_state["_force_neg_tab"] = True
+                    st.session_state["_force_tab"] = "negotiate"
                     st.session_state["neg_results"] = neg_results
                     st.session_state["neg_clause"] = sel_clause
 
