@@ -311,8 +311,32 @@ setTimeout(clickTab,300);
             for c in summary["coverage"]["detected_clauses"]
         )
         st.markdown(f'<div style="line-height:2.2">{coverage_html}</div>', unsafe_allow_html=True)
+
+
+        st.markdown('<p class="section-header">Clause Text Mapping</p>', unsafe_allow_html=True)
+        for clause_name in sorted(clause_df["final_clause"].unique()):
+            if clause_name == "Unknown":
+                continue
+            rows = clause_df[clause_df["final_clause"] == clause_name]
+            has_dev = rows["final_deviation"].any()
+            icon = "[DEV] " if has_dev else ""
+            with st.expander(f"{icon}{clause_name}  ({len(rows)} span{'s' if len(rows)>1 else ''})"):
+                for _, row in rows.iterrows():
+                    sid = int(row["span_id"])
+                    conf = row["confidence"]
+                    sev = row.get("severity")
+                    dev_badge = f' &nbsp; {pill(sev)}' if row["final_deviation"] and sev else ""
+                    st.markdown(f'<span style="color:#64748b;font-size:0.8rem">Span {sid} &nbsp;·&nbsp; confidence <b style="color:#63b3ed">{conf:.0%}</b>{dev_badge}</span>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem;margin:0.4rem 0;color:#cbd5e1;font-size:0.88rem;line-height:1.6">{spans[sid]}</div>', unsafe_allow_html=True)
+
+        st.markdown('<p style="color:#334155;font-size:0.75rem;margin-top:2rem">Deviation detection uses semantic similarity, polarity analysis, and clause-specific rules. Not legal advice.</p>', unsafe_allow_html=True)
+
+
+    # ── TAB 3: ANALYTICS ─────────────────────────────────────────────────────
+
+
         st.markdown('<p style="color:#334155;font-size:0.75rem;margin-top:1.5rem">Deviation detection uses semantic similarity, polarity analysis, and clause-specific rules. Not legal advice.</p>', unsafe_allow_html=True)
-    # ── TAB 2: DEVIATING CLAUSES ─────────────────────────────────────────────
+
     with tab2:
         deviating = clause_df[clause_df["final_deviation"]]
         if deviating.empty:
@@ -351,29 +375,6 @@ setTimeout(clickTab,300);
                     st.markdown("**Clause text:**")
                     st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem;color:#cbd5e1;font-size:0.85rem;line-height:1.6;border-left:3px solid rgba(99,179,237,0.3)">{spans[sid]}</div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
-
-
-        st.markdown('<p class="section-header">Clause Text Mapping</p>', unsafe_allow_html=True)
-        for clause_name in sorted(clause_df["final_clause"].unique()):
-            if clause_name == "Unknown":
-                continue
-            rows = clause_df[clause_df["final_clause"] == clause_name]
-            has_dev = rows["final_deviation"].any()
-            icon = "[DEV] " if has_dev else ""
-            with st.expander(f"{icon}{clause_name}  ({len(rows)} span{'s' if len(rows)>1 else ''})"):
-                for _, row in rows.iterrows():
-                    sid = int(row["span_id"])
-                    conf = row["confidence"]
-                    sev = row.get("severity")
-                    dev_badge = f' &nbsp; {pill(sev)}' if row["final_deviation"] and sev else ""
-                    st.markdown(f'<span style="color:#64748b;font-size:0.8rem">Span {sid} &nbsp;·&nbsp; confidence <b style="color:#63b3ed">{conf:.0%}</b>{dev_badge}</span>', unsafe_allow_html=True)
-                    st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem;margin:0.4rem 0;color:#cbd5e1;font-size:0.88rem;line-height:1.6">{spans[sid]}</div>', unsafe_allow_html=True)
-
-        st.markdown('<p style="color:#334155;font-size:0.75rem;margin-top:2rem">Deviation detection uses semantic similarity, polarity analysis, and clause-specific rules. Not legal advice.</p>', unsafe_allow_html=True)
-
-
-    # ── TAB 3: ANALYTICS ─────────────────────────────────────────────────────
-
     # ── TAB 3: RISK ANALYSIS ──────────────────────────────────────────────
     with tab3:
         if summary["deviations"]:
