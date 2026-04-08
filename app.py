@@ -23,7 +23,7 @@ from negotiation.simulator import simulate_negotiation, STANCES
 
 # ── Session state ──────────────────────────────────────────────────────────────
 for k, v in [("analyzed", False), ("_active_tab", "overview"), ("last_answer", None),
-             ("_force_ask_tab", False), ("neg_results", None), ("neg_clause", None),
+             ("_force_ask_tab", False), ("_force_neg_tab", False), ("neg_results", None), ("neg_clause", None),
              ("ob_graph", None), ("contract_doc_summary", None),
              ("multi_doc_results", None), ("analysis_mode", "single")]:
     if k not in st.session_state: st.session_state[k] = v
@@ -272,6 +272,9 @@ if st.session_state.analyzed:
     if st.session_state.get('_force_ask_tab'):
         _idx = _TAB_IDX.get('ask', 5)
         st.session_state['_force_ask_tab'] = False
+    if st.session_state.get('_force_neg_tab'):
+        _idx = _TAB_IDX.get('negotiate', 6)
+        st.session_state['_force_neg_tab'] = False
     _tabs = st.tabs(_tab_labels)
     tab1,tab2,tab3,tab4,tab5,tab6,tab7 = _tabs[:7]
     tab8 = _tabs[7] if _has_multidoc else None
@@ -496,7 +499,7 @@ setTimeout(clickTab,300);
                             any(d["clause"] == c for d in ds["risk_flags"])
                             for c in level1.keys()
                         )
-                        icon = "⚠️ " if has_dev else "📁 "
+                        icon = "[DEV] " if has_dev else ""
                         with st.expander(f"{icon}{cat}  ({len(level1)} clause{'s' if len(level1)>1 else ''})"):
                             st.markdown(f'<div style="background:rgba(99,179,237,0.06);border-left:3px solid #63b3ed;padding:0.6rem 1rem;border-radius:0 8px 8px 0;color:#cbd5e1;font-size:0.88rem;line-height:1.7;margin-bottom:0.8rem">{cat_sum}</div>', unsafe_allow_html=True)
                             for clause, clause_sum in level1.items():
@@ -628,7 +631,7 @@ Select a deviating clause and generate alternative phrasings at three negotiatio
             with st.expander("View original text"):
                 st.markdown(f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:0.8rem;color:#94a3b8;font-size:0.85rem;line-height:1.6">{sel_text}</div>', unsafe_allow_html=True)
 
-            if st.button("⚖️ Generate Negotiation Alternatives", use_container_width=False, key="neg_btn"):
+            if st.button("Generate Negotiation Alternatives", use_container_width=False, key="neg_btn"):
                 with st.spinner("Generating alternatives at 3 negotiation stances..."):
                     from pipeline import load_baselines
                     _centroids, _, _, _, _ = load_baselines()
@@ -636,6 +639,7 @@ Select a deviating clause and generate alternative phrasings at three negotiatio
                         sel_clause, sel_text, sel_reasons, sel_score,
                         st.session_state.embedder, _centroids, llm_fn=llm
                     )
+                    st.session_state["_force_neg_tab"] = True
                     st.session_state["neg_results"] = neg_results
                     st.session_state["neg_clause"] = sel_clause
 
