@@ -19,6 +19,7 @@ from summarizer.contract_summarizer import summarize_contract, evaluate_summary
 from summarizer.hrs_engine import hierarchical_summarize, CLAUSE_CATEGORIES
 from rag.contract_rag import crag_answer
 from negotiation.simulator import simulate_negotiation, STANCES
+from multi_doc.aggregator import aggregate_documents, build_heatmap_dataframe
 
 
 # ── Session state ──────────────────────────────────────────────────────────────
