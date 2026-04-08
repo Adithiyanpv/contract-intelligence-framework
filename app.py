@@ -281,11 +281,14 @@ if st.session_state.analyzed:
 
     if _idx > 0:
         st.components.v1.html(f"""<script>
+var _target = {_idx};
+var _attempts = 0;
 function clickTab(){{
     var t=window.parent.document.querySelectorAll('[data-baseweb="tab"]');
-    if(t.length>{_idx}){{t[{_idx}].click();}}else{{setTimeout(clickTab,150);}}
+    if(t.length>_target){{t[_target].click(); return;}}
+    if(++_attempts < 20){{setTimeout(clickTab, 100);}}
 }}
-setTimeout(clickTab,300);
+setTimeout(clickTab, 500);
 </script>""", height=0)
 
     # ── TAB 1: OVERVIEW ──────────────────────────────────────────────────────
@@ -641,6 +644,7 @@ Select a deviating clause and generate alternative phrasings at three negotiatio
                         sel_clause, sel_text, sel_reasons, sel_score,
                         st.session_state.embedder, _centroids, llm_fn=llm
                     )
+                    st.session_state["_active_tab"] = "negotiate"
                     st.session_state["_force_tab"] = "negotiate"
                     st.session_state["neg_results"] = neg_results
                     st.session_state["neg_clause"] = sel_clause
