@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 st.set_page_config(page_title="ContractIQ", page_icon="⚖️", layout="wide")
 import os, sys, requests, tempfile
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -598,7 +598,7 @@ Powered by <b>{"Groq · llama-3.1-8b-instant" if llm_source=="groq" else "Ollama
         st.markdown('<p class="section-header">Clause Negotiation Simulator</p>', unsafe_allow_html=True)
         st.markdown("""<div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.2);border-radius:8px;padding:0.8rem 1rem;font-size:0.82rem;color:#94a3b8;margin-bottom:1rem">
 Select a deviating clause and generate alternative phrasings at three negotiation stances. Each alternative is scored for how much it moves the clause toward standard language using cosine similarity against the clause centroid.
-
+</div>""", unsafe_allow_html=True)
         deviating = clause_df[clause_df["final_deviation"]]
         if deviating.empty:
             st.success("No deviating clauses to negotiate — this contract has no flagged deviations.")
@@ -753,7 +753,7 @@ else:
     st.markdown("""
 <div style="background:linear-gradient(135deg,#0d1b2a 0%,#1a2744 100%);border:1px solid rgba(99,179,237,0.2);border-radius:16px;padding:2.5rem 3rem;margin:2rem 0">
   <div style="margin-bottom:1rem">
-    <div style="font-size:1.5rem;font-weight:700;color:#e2e8f0;margin-bottom:0.3rem">⚖️ About ContractIQ</div>
+    <div style="font-size:1.5rem;font-weight:700;color:#e2e8f0;margin-bottom:0.3rem">About ContractIQ</div>
     <div style="color:#63b3ed;font-size:0.82rem;font-weight:600;letter-spacing:0.06em">THE WORLD'S FIRST MULTI-SIGNAL SEMANTIC CONTRACT DEVIATION ENGINE</div>
   </div>
   <p style="color:#94a3b8;line-height:1.8;font-size:0.93rem;margin:0">
